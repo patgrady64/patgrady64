@@ -12,6 +12,7 @@ export default function AdminDashboard() {
     const [projects, setProjects] = useState([]);
     const [fetchingProjects, setFetchingProjects] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
 
     const fileInputRef = React.useRef(null);
 
@@ -130,17 +131,7 @@ export default function AdminDashboard() {
             }
 
             // Fire multi-part form package directly to Flask endpoint pipeline
-            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin/sync-project`, {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(result.error || "Inversion pipeline failed to process directory files.");
-            }
-
+            const result = await streamPayloadToPipeline(formData);
             console.log("Ingestion Synchronized Successfully:", result);
             fetchProjects(); // Reload table data seamlessly
             
@@ -149,49 +140,76 @@ export default function AdminDashboard() {
             setError(err.message);
         } finally {
             setUploading(false);
+            setUploadProgress(0);
         }
     };
 
     const handleFolderSelect = async (fileList) => {
-    if (uploading) return;
-    setUploading(true);
-    setError(null);
+        if (uploading) return;
+        setUploading(true);
+        setError(null);
 
-    try {
-        const formData = new FormData();
-        
-        for (let i = 0; i < fileList.length; i++) {
-            const file = fileList[i];
+        try {
+            const formData = new FormData();
             
-            // Extract file name out of its relative structure
-            if (file.name === 'info.csv') {
-                formData.append('info_csv', file);
-            } else {
-                formData.append(file.name, file);
+            for (let i = 0; i < fileList.length; i++) {
+                const file = fileList[i];
+                
+                // Extract file name out of its relative structure
+                if (file.name === 'info.csv') {
+                    formData.append('info_csv', file);
+                } else {
+                    formData.append(file.name, file);
+                }
             }
-        }
 
-        if (!formData.has('info_csv')) {
-            throw new Error("Missing mandatory 'info.csv' configuration file in selected directory.");
-        }
+            if (!formData.has('info_csv')) {
+                throw new Error("Missing mandatory 'info.csv' configuration file in selected directory.");
+            }
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin/sync-project`, {
-            method: 'POST',
-            body: formData
+            const result = await streamPayloadToPipeline(formData);
+            console.log("Folder Selection Synchronized Successfully:", result);
+            fetchProjects(); // Refresh table dashboard data
+            
+        } catch (err) {
+            console.error("Selection Upload Error:", err);
+            setError(err.message);
+        } finally {
+            setUploading(false);
+            setUploadProgress(0);
+        }
+    };
+
+    const streamPayloadToPipeline = (formData) => {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            const targetUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin/sync-project`;
+            
+            xhr.open('POST', targetUrl, true);
+
+            // Listen to active upload streaming ticks
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const percentage = Math.round((event.loaded / event.total) * 100);
+                    setUploadProgress(percentage);
+                }
+            };
+
+            xhr.onload = () => {
+                let result = {};
+                try { result = JSON.parse(xhr.responseText); } catch (e) {}
+                
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve(result);
+                } else {
+                    reject(new Error(result.error || "Inversion pipeline failed to process directory files."));
+                }
+            };
+
+            xhr.onerror = () => reject(new Error("Network telemetry failure during pipeline stream."));
+            xhr.send(formData);
         });
-
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Inversion pipeline failed.");
-
-        fetchProjects(); // Refresh table dashboard data
-        
-    } catch (err) {
-        console.error("Selection Upload Error:", err);
-        setError(err.message);
-    } finally {
-        setUploading(false);
-    }
-};
+    };
 
     // --- 1. LOGIN SCREEN ---
     if (!session) {
@@ -282,9 +300,23 @@ export default function AdminDashboard() {
                   
                   <div className="space-y-1.5">
                     <p className="text-base font-semibold text-slate-200">
-                      {uploading ? 'Processing & streaming asset build...' : 'Drag & drop or click to select project folder'}
+                      {uploading 
+                        ? `Processing & streaming asset build... (${uploadProgress}%)` 
+                        : 'Drag & drop or click to select project folder'
+                      }
                     </p>
-                    <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
+                    
+                    {/* Progress Bar Container Track */}
+                    {uploading && (
+                      <div className="w-full max-w-xs mx-auto bg-gray-900 h-2 rounded-full overflow-hidden border border-gray-800 p-0.5 mt-3 shadow-inner">
+                        <div 
+                          className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300 ease-out shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+                          style={{ width: `${uploadProgress}%` }}
+                        ></div>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed pt-1">
                       {error ? (
                           <span className="text-red-400 font-mono block">{error}</span>
                       ) : (
@@ -293,10 +325,26 @@ export default function AdminDashboard() {
                     </p>
                   </div>
 
-                  <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-lg bg-gray-950 border border-gray-800 text-[10px] font-mono text-gray-400 shadow-inner">
-                    <span className="flex items-center gap-1"><FileCode size={11} className="text-emerald-400" /> info.csv</span>
-                    <span className="text-gray-700">|</span>
-                    <span className="flex items-center gap-1"><ShieldAlert size={11} className="text-purple-400" /> Build Asset</span>
+                  <div className="flex flex-wrap items-center justify-center gap-2 max-w-md mx-auto pt-2">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-950 border border-gray-800/80 text-[10px] font-mono text-slate-400 shadow-sm">
+                      <FileCode size={12} className="text-emerald-400" />
+                      <span>info.csv</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-950 border border-gray-800/80 text-[10px] font-mono text-slate-400 shadow-sm">
+                      <ShieldAlert size={12} className="text-purple-400" />
+                      <span>Application Binaries (.apk / .zip)</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-950 border border-gray-800/80 text-[10px] font-mono text-slate-400 shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                      <span>demo.gif (Hero visual)</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-950 border border-gray-800/80 text-[10px] font-mono text-slate-400 shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                      <span>/ScreenShots (Folder cluster)</span>
+                    </div>
                   </div>
                 </div>
               </div>
