@@ -25,9 +25,26 @@ def parse_project_csv(csv_text_content):
     csv_file = io.StringIO(csv_text_content)
     reader = csv.DictReader(csv_file)
     for row in reader:
-        clean_row = {k.strip(): v.strip() for k, v in row.items() if k}
+        # Strip whitespace from keys and values safely
+        clean_row = {k.strip(): v.strip() for k, v in row.items() if k and v}
+
+        # 1. Parse Semi-Colon Delimited Lists Safely
         if 'tech_stack' in clean_row:
             clean_row['tech_stack'] = [tech.strip() for tech in clean_row['tech_stack'].split(';') if tech.strip()]
+        else:
+            clean_row['tech_stack'] = []
+
+        if 'architecture_tags' in clean_row:
+            clean_row['architecture_tags'] = [tag.strip() for tag in clean_row['architecture_tags'].split(';') if
+                                              tag.strip()]
+        else:
+            clean_row['architecture_tags'] = []
+
+        if 'screenshots' in clean_row:
+            clean_row['screenshots'] = [shot.strip() for shot in clean_row['screenshots'].split(';') if shot.strip()]
+        else:
+            clean_row['screenshots'] = []
+
         return clean_row
     return None
 
