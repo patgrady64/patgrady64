@@ -13,6 +13,8 @@ export default function AdminDashboard() {
     const [fetchingProjects, setFetchingProjects] = useState(false);
     const [uploading, setUploading] = useState(false);
 
+    const fileInputRef = React.useRef(null);
+
     // Check for an active session when the page loads
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -150,6 +152,47 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleFolderSelect = async (fileList) => {
+    if (uploading) return;
+    setUploading(true);
+    setError(null);
+
+    try {
+        const formData = new FormData();
+        
+        for (let i = 0; i < fileList.length; i++) {
+            const file = fileList[i];
+            
+            // Extract file name out of its relative structure
+            if (file.name === 'info.csv') {
+                formData.append('info_csv', file);
+            } else {
+                formData.append(file.name, file);
+            }
+        }
+
+        if (!formData.has('info_csv')) {
+            throw new Error("Missing mandatory 'info.csv' configuration file in selected directory.");
+        }
+
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin/sync-project`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Inversion pipeline failed.");
+
+        fetchProjects(); // Refresh table dashboard data
+        
+    } catch (err) {
+        console.error("Selection Upload Error:", err);
+        setError(err.message);
+    } finally {
+        setUploading(false);
+    }
+};
+
     // --- 1. LOGIN SCREEN ---
     if (!session) {
         return (
@@ -208,10 +251,26 @@ export default function AdminDashboard() {
               <div 
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
-                className={`group relative bg-gradient-to-b from-gray-950/40 to-gray-950/80 border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-950/5 flex flex-col items-center justify-center min-h-[340px] ${
+                onClick={() => fileInputRef.current?.click()} // <-- Triggers picker on click
+                className={`group relative bg-gradient-to-b from-gray-950/40 to-gray-950/80 border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-950/5 flex flex-col items-center justify-center min-h-[340px] cursor-pointer ${
                     uploading ? 'border-amber-500/50 bg-amber-950/5' : 'border-gray-800 hover:border-emerald-500/40'
                 }`}
               >
+                {/* INVISIBLE FOLDER PICKER INPUT */}
+                <input 
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleFolderSelect(e.target.files);
+                    }
+                  }}
+                  style={{ display: 'none' }}
+                  webkitdirectory="" // <-- Essential for folder access
+                  directory=""       // <-- Fallback for alternative engines
+                  multiple
+                />
+
                 <div className="absolute inset-0 bg-emerald-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-3xl pointer-events-none"></div>
 
                 <div className="relative z-10 max-w-sm mx-auto space-y-4">
@@ -223,18 +282,17 @@ export default function AdminDashboard() {
                   
                   <div className="space-y-1.5">
                     <p className="text-base font-semibold text-slate-200">
-                      {uploading ? 'Processing & streaming asset build...' : 'Drag & drop your project build folder'}
+                      {uploading ? 'Processing & streaming asset build...' : 'Drag & drop or click to select project folder'}
                     </p>
                     <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
                       {error ? (
                           <span className="text-red-400 font-mono block">{error}</span>
                       ) : (
-                          <>Provide a localized production directory containing a structural <span className="text-amber-400 font-mono">info.csv</span> file and compiled application assets.</>
+                          <>Select or drop a localized production directory containing a structural <span className="text-amber-400 font-mono">info.csv</span> file and compiled application assets.</>
                       )}
                     </p>
                   </div>
 
-                  {/* Mini Pipeline Requirements Spec Pill */}
                   <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-lg bg-gray-950 border border-gray-800 text-[10px] font-mono text-gray-400 shadow-inner">
                     <span className="flex items-center gap-1"><FileCode size={11} className="text-emerald-400" /> info.csv</span>
                     <span className="text-gray-700">|</span>
@@ -253,7 +311,7 @@ export default function AdminDashboard() {
                 </h2>
                 <span className="text-xs font-mono text-gray-500">
                   {projects.length} Total Records Loaded
-                </h2>
+                </span>
               </div>
 
               {fetchingProjects ? (
