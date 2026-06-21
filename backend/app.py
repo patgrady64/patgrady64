@@ -66,22 +66,27 @@ def sync_project_pipeline():
 
         title = secure_filename(project_data.get('title', 'project'))
 
-        def upload_asset(file_key, folder, filename):
+        def upload_asset(file_key, folder, content_type):
             if file_key in request.files:
                 file_obj = request.files[file_key]
-                path = f"{folder}/{title}/{secure_filename(filename)}"
+
+                # 1. Ensure we have a valid name to prevent path errors
+                clean_title = secure_filename(title) if 'title' in locals() else "project"
+                safe_filename = secure_filename(file_obj.filename)
+                path = f"{folder}/{clean_title}/{safe_filename}"
 
                 try:
-                    supabase.storage.from_("portfolio-assets").remove([path])
-                except:
-                    pass
-
-                supabase.storage.from_("portfolio-assets").upload(
-                    path=path,
-                    file=file_obj.read(),
-                    file_options={"content-type": "application/octet-stream"}
-                )
-                return supabase.storage.from_("portfolio-assets").get_public_url(path)
+                    # 2. Upload the file
+                    supabase.storage.from_("portfolio-assets").upload(
+                        path=path,
+                        file=file_obj.read(),
+                        file_options={"content-type": content_type}
+                    )
+                    return supabase.storage.from_("portfolio-assets").get_public_url(path)
+                except Exception as e:
+                    # 3. Print the error so we can see why it fails, but don't crash the server
+                    print(f"PIPELINE ERROR: Could not upload {path}: {e}")
+                    return None
             return None
 
         # Upload Binary and GIF
