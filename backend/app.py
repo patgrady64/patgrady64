@@ -17,6 +17,7 @@ CORS(app)
 
 # 2. INITIALIZE CLIENT
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
+print("SUPABASE_URL =", SUPABASE_URL)
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -85,18 +86,21 @@ def sync_project_pipeline():
                     supabase.storage.from_("portfolio-assets").upload(
                         path=path,
                         file=file_obj.read(),
-                        file_options={"content-type": content_type}
+                        file_options={"contentType": content_type}
                     )
                     return supabase.storage.from_("portfolio-assets").get_public_url(path)
                 except Exception as e:
-                    # 3. Print the error so we can see why it fails, but don't crash the server
-                    print(f"PIPELINE ERROR: Could not upload {path}: {e}")
+                    import traceback
+                    print(f"PIPELINE ERROR: Could not upload {path}")
+                    traceback.print_exc()
                     return None
             return None
 
         # Upload Binary and GIF
-        d_url = upload_asset('binary_filename', 'installers', project_data.get('binary_filename', 'app.apk'))
-        g_url = upload_asset('gif_filename', 'visuals', project_data.get('gif_filename', 'demo.gif'))
+        d_url = upload_asset(
+            project_data.get('binary_filename'), 'installers', project_data.get('binary_filename', 'app.apk'))
+        g_url = upload_asset(
+            project_data.get('gif_filename'), 'visuals', project_data.get('gif_filename', 'demo.gif'))
 
         # Process Screenshots using keys from request.files
         s_urls = []
