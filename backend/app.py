@@ -111,7 +111,6 @@ def sync_project_pipeline():
             file_bytes = asset_file.read()
             bucket_path = f"installers/{secure_filename(title)}/{secure_filename(binary_filename)}"
 
-            # FIX: Use 'file_options' with standard string headers
             supabase.storage.from_("portfolio-assets").upload(
                 path=bucket_path,
                 file=file_bytes,
@@ -125,7 +124,6 @@ def sync_project_pipeline():
             gif_bytes = gif_file.read()
             bucket_path = f"visuals/{secure_filename(title)}/{secure_filename(gif_filename)}"
 
-            # FIX: Use 'file_options' with standard string headers
             supabase.storage.from_("portfolio-assets").upload(
                 path=bucket_path,
                 file=gif_bytes,
@@ -140,7 +138,6 @@ def sync_project_pipeline():
                 shot_bytes = shot_file.read()
                 bucket_path = f"screenshots/{secure_filename(title)}/{secure_filename(shot_name)}"
 
-                # FIX: Use 'file_options' with standard string headers
                 supabase.storage.from_("portfolio-assets").upload(
                     path=bucket_path,
                     file=shot_bytes,
@@ -149,29 +146,29 @@ def sync_project_pipeline():
                 public_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
                 screenshot_urls.append(public_url)
 
-        # 4. Consolidate into DB Payload Matching Your Expanded Schema
-                db_payload = {
-                    "title": title,
-                    "project_type": project_type,
-                    "description": project_data.get('description'),
-                    "tech_stack": project_data.get('tech_stack', []),
-                    "architecture_tags": project_data.get('architecture_tags', []),
-                    "github_url": project_data.get('github_url'),
-                    "live_url": project_data.get('live_url'),
-                    "developer_notes": project_data.get('developer_notes'),
-                    "download_url": download_url if download_url else project_data.get('download_url'),
-                    "gif_url": gif_url if gif_url else project_data.get('gif_url'),
-                    "screenshot_urls": screenshot_urls if screenshot_urls else project_data.get('screenshot_urls', [])
-                }
+        # 4. Consolidate into DB Payload (FIX: Aligned outside of screenshot loop)
+        db_payload = {
+            "title": title,
+            "project_type": project_type,
+            "description": project_data.get('description'),
+            "tech_stack": project_data.get('tech_stack', []),
+            "architecture_tags": project_data.get('architecture_tags', []),
+            "github_url": project_data.get('github_url'),
+            "live_url": project_data.get('live_url'),
+            "developer_notes": project_data.get('developer_notes'),
+            "download_url": download_url if download_url else project_data.get('download_url'),
+            "gif_url": gif_url if gif_url else project_data.get('gif_url'),
+            "screenshot_urls": screenshot_urls if screenshot_urls else project_data.get('screenshot_urls', [])
+        }
 
-                # FIX: Remove trailing .execute() to let the native upsert run directly
-                supabase.table("projects").upsert(db_payload, on_conflict="title")
+        # Let native upsert run cleanly without legacy execution chains
+        supabase.table("projects").upsert(db_payload, on_conflict="title")
 
-                return jsonify({
-                    "status": "success",
-                    "message": f"Successfully synchronized project components for: {title}",
-                    "payload": db_payload
-                }), 200
+        return jsonify({
+            "status": "success",
+            "message": f"Successfully synchronized project components for: {title}",
+            "payload": db_payload
+        }), 200
 
     except Exception as e:
         return jsonify({"error": f"Internal pipeline execution error: {str(e)}"}), 500
