@@ -9,6 +9,9 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    const [projects, setProjects] = useState([]);
+    const [fetchingProjects, setFetchingProjects] = useState(false);
+
     // Check for an active session when the page loads
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -36,6 +39,23 @@ export default function AdminDashboard() {
     const handleLogout = async () => {
         await supabase.auth.signOut();
     };
+
+    // Fetch projects from backend on load
+    useEffect(() => {
+        if (session) {
+            setFetchingProjects(true);
+            fetch('http://localhost:5000/api/projects')
+                .then(res => res.json())
+                .then(data => {
+                    setProjects(Array.isArray(data) ? data : []);
+                    setFetchingProjects(false);
+                })
+                .catch(err => {
+                    console.error("Error fetching projects:", err);
+                    setFetchingProjects(false);
+                });
+        }
+    }, [session]);
 
     // --- 1. LOGIN SCREEN ---
     if (!session) {
@@ -119,7 +139,83 @@ return (
             </div>
           </div>
         </main>
-        
+        {/* Project Inventory System Console */}
+        <section className="bg-gray-950 border border-gray-800 rounded-3xl overflow-hidden shadow-xl">
+          <div className="border-b border-gray-800 bg-gray-900/50 px-6 py-4 flex items-center justify-between">
+            <h2 className="text-sm font-mono font-bold tracking-wider text-gray-400 uppercase flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              Cloud Sync Inventory
+            </h2>
+            <span className="text-xs font-mono text-gray-500">
+              {projects.length} Total Records Loaded
+            </span>
+          </div>
+
+          {fetchingProjects ? (
+            <div className="p-12 text-center text-sm font-mono text-gray-500">
+              Querying database registry...
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="p-12 text-center text-sm font-mono text-gray-500">
+              No project records detected in deployment environment database.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse font-sans">
+                <thead>
+                  <tr className="border-b border-gray-800 bg-gray-900/30 text-xs font-mono text-gray-400">
+                    <th className="p-4 font-semibold">Project Title</th>
+                    <th className="p-4 font-semibold">Type</th>
+                    <th className="p-4 font-semibold">Tech Stack</th>
+                    <th className="p-4 font-semibold">Target Distribution</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm divide-y divide-gray-900">
+                  {projects.map((project) => (
+                    <tr key={project.id || project.title} className="hover:bg-gray-900/40 transition-colors duration-150 group">
+                      <td className="p-4">
+                        <div className="font-bold text-white group-hover:text-emerald-400 transition-colors">
+                          {project.title}
+                        </div>
+                        <div className="text-xs text-gray-400 max-w-xs truncate mt-0.5">
+                          {project.description}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-mono uppercase font-semibold bg-gray-900 border border-gray-800 text-slate-300">
+                          {project.project_type || 'web'}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex flex-wrap gap-1.5 max-w-xs">
+                          {project.tech_stack?.map((tech, idx) => (
+                            <span key={idx} className="text-[11px] bg-slate-900/60 text-slate-400 px-2 py-0.5 rounded border border-slate-800/60">
+                              {tech}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-4 font-mono text-xs text-gray-400">
+                        {project.download_url || project.live_url || project.apk_url ? (
+                          <a 
+                            href={project.download_url || project.live_url || project.apk_url} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="text-blue-400 hover:underline inline-flex items-center gap-1"
+                          >
+                            Link Available ↗
+                          </a>
+                        ) : (
+                          <span className="text-gray-600">None Configured</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
