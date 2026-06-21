@@ -35,26 +35,28 @@ def parse_project_csv(csv_text_content):
     return None
 
 
-def upload_asset(file_key, folder, filename, project_title):
+def upload_asset(file_key, folder, filename):
     if file_key in request.files:
         file_obj = request.files[file_key]
         file_obj.seek(0)
 
-        path = f"{folder}/{secure_filename(project_title)}/{secure_filename(filename)}"
+        path = f"{folder}/{secure_filename(title)}/{secure_filename(filename)}"
 
         try:
             supabase.storage.from_("portfolio-assets").upload(
                 path=path,
                 file=file_obj.read(),
-                file_options={"content-type": "application/octet-stream"}
+                file_options={"contentType": "application/octet-stream"}
             )
         except Exception as e:
+            # If it's a 409, log it, but DO NOT return None
             if '409' in str(e):
-                print(f"INFO: {filename} exists, skipping upload.")
+                print(f"INFO: {filename} already exists. Skipping upload.")
             else:
-                print(f"PIPELINE ERROR: Upload failed for {path}: {e}")
+                print(f"PIPELINE ERROR: {e}")
                 return None
 
+        # ALWAYS fetch the URL, whether it was newly uploaded or already there
         return supabase.storage.from_("portfolio-assets").get_public_url(path)
     return None
 
@@ -94,8 +96,8 @@ def sync_project_pipeline():
         # Sync to DB
         supabase.table("projects").upsert({
             **project_data,
-            "download_url": d_url,
-            "gif_url": g_url,
+            "download_url": d_url or "",
+            "gif_url": g_url or "",
             "screenshot_urls": s_urls
         }, on_conflict="title").execute()
 
