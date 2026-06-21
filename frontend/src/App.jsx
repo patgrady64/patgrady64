@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ReactPlayer from 'react-player';
-import { Github, Linkedin, Tv, Youtube, Download, ExternalLink, Code } from 'lucide-react';
+import { Tv, Download, ExternalLink, Code } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faGithub, faLinkedin, faYoutube } from '@fortawesome/free-brands-svg-icons';
 
 function App() {
   const [projects, setProjects] = useState([]);
@@ -37,8 +39,12 @@ function App() {
             <span className="text-amber-400 font-semibold"> Super Mario Bros 3 Randomizer (SMB3R)</span>.
           </p>
           <div className="flex gap-4 mt-6 justify-center md:justify-start">
-            <a href="https://github.com" className="flex items-center gap-2 text-gray-400 hover:text-white transition"><Github size={20}/> GitHub</a>
-            <a href="https://linkedin.com" className="flex items-center gap-2 text-gray-400 hover:text-white transition"><Linkedin size={20}/> LinkedIn</a>
+            <a href="https://github.com" className="flex items-center gap-2 text-gray-400 hover:text-white transition">
+              <FontAwesomeIcon icon={faGithub} className="text-xl" /> GitHub
+            </a>
+            <a href="https://linkedin.com" className="flex items-center gap-2 text-gray-400 hover:text-white transition">
+              <FontAwesomeIcon icon={faLinkedin} className="text-xl" /> LinkedIn
+            </a>
           </div>
         </div>
       </header>
@@ -97,7 +103,9 @@ function App() {
           </h2>
           <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-gray-800 p-4 border border-gray-700 rounded-xl">
-              <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2"><Youtube className="text-red-500"/> Latest Walkthrough</h3>
+              <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                <FontAwesomeIcon icon={faYoutube} className="text-red-500 text-xl" /> Latest Video
+              </h3>
               <div className="aspect-video rounded-lg overflow-hidden bg-gray-900">
                 <ReactPlayer url="https://www.youtube.com/watch?v=dQw4w9WgXcQ" width="100%" height="100%" controls />
               </div>
