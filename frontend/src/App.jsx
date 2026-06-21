@@ -62,11 +62,14 @@ function App() {
 
             {/* Modern Social Action Row */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-8">
-              <a href="https://github.com" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-700 hover:border-gray-600 shadow-md transition-all duration-200">
+              <a href="https://github.com/patgrady64" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-700 hover:border-gray-600 shadow-md transition-all duration-200">
                 <FontAwesomeIcon icon={faGithub} className="text-lg" /> GitHub Profile
               </a>
-              <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-200 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-800 hover:border-gray-700 transition-all duration-200">
+              <a href="https://www.linkedin.com/in/patgrady64/" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-200 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-800 hover:border-gray-700 transition-all duration-200">
                 <FontAwesomeIcon icon={faLinkedin} className="text-lg text-blue-400" /> LinkedIn Network
+              </a>
+              <a href="https://www.youtube.com/@iminvisibl2u" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 bg-red-950/20 hover:bg-red-900/30 text-red-400 hover:text-red-300 font-medium text-sm px-4 py-2.5 rounded-xl border border-red-900/30 hover:border-red-700/50 transition-all duration-200">
+                <FontAwesomeIcon icon={faYoutube} className="text-lg" /> YouTube Channel
               </a>
             </div>
           </div>
