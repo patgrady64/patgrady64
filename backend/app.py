@@ -32,26 +32,6 @@ def parse_project_csv(csv_text_content):
         return clean_row
     return None
 
-# Fallback sample data until you pull directly from your Supabase DB rows
-SAMPLE_PROJECTS = [
-    {
-        "id": 1,
-        "title": "PicRoulette",
-        "description": "Dynamic photo management application.",
-        "tech_stack": ["Kotlin", "Android Studio"],
-        "gif_url": "",
-        "apk_url": ""
-    },
-    {
-        "id": 2,
-        "title": "SinceWhen",
-        "description": "Clean, milestone and time tracking application.",
-        "tech_stack": ["Kotlin", "Android Studio"],
-        "gif_url": "",
-        "apk_url": ""
-    }
-]
-
 # 3. INITIALIZE CLIENT
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -69,9 +49,17 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 def home():
     return jsonify({"status": "healthy", "message": "Portfolio API Engine running smoothly."})
 
+
 @app.route('/api/projects', methods=['GET'])
 def get_projects():
-    return jsonify(SAMPLE_PROJECTS)
+    try:
+        # Fetch all columns for all projects from your live Supabase table
+        response = supabase.table("projects").select("*").execute()
+
+        # response.data contains the list of row dictionaries returned by Supabase
+        return jsonify(response.data), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch live database records: {str(e)}"}), 500
 
 @app.route('/api/youtube', methods=['GET'])
 def get_youtube_videos():
