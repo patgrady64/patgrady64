@@ -82,6 +82,21 @@ def sync_project_pipeline():
 
         title = project_data.get('title', 'project')
 
+        ALLOWED_PROJECT_FIELDS = {
+            "title",
+            "description",
+            "tech_stack",
+            "architecture_tags",
+            "project_type",
+            "github_url",
+            "live_url"
+        }
+
+        clean_project_data = {
+            k: v for k, v in project_data.items()
+            if k in ALLOWED_PROJECT_FIELDS
+        }
+
         # Upload Assets
         d_url = upload_asset('binary_filename', 'installers', project_data.get('binary_filename', 'app.apk'), title)
         g_url = upload_asset('gif_filename', 'visuals', project_data.get('gif_filename', 'demo.gif'), title)
@@ -94,7 +109,7 @@ def sync_project_pipeline():
 
         # Sync to DB
         supabase.table("projects").upsert({
-            **project_data,
+            **clean_project_data,
             "download_url": d_url or "",
             "gif_url": g_url or "",
             "screenshot_urls": s_urls
