@@ -35,12 +35,13 @@ def parse_project_csv(csv_text_content):
     return None
 
 
-def upload_asset(file_key, folder, filename):
+def upload_asset(file_key, folder, filename, project_title):
     if file_key in request.files:
         file_obj = request.files[file_key]
         file_obj.seek(0)
 
-        path = f"{folder}/{secure_filename(title)}/{secure_filename(filename)}"
+        # Use the passed project_title here
+        path = f"{folder}/{secure_filename(project_title)}/{secure_filename(filename)}"
 
         try:
             supabase.storage.from_("portfolio-assets").upload(
@@ -49,14 +50,12 @@ def upload_asset(file_key, folder, filename):
                 file_options={"contentType": "application/octet-stream"}
             )
         except Exception as e:
-            # If it's a 409, log it, but DO NOT return None
             if '409' in str(e):
-                print(f"INFO: {filename} already exists. Skipping upload.")
+                print(f"INFO: {filename} already exists, skipping upload.")
             else:
-                print(f"PIPELINE ERROR: {e}")
+                print(f"PIPELINE ERROR: Upload failed for {path}: {e}")
                 return None
 
-        # ALWAYS fetch the URL, whether it was newly uploaded or already there
         return supabase.storage.from_("portfolio-assets").get_public_url(path)
     return None
 
