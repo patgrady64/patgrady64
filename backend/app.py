@@ -7,172 +7,103 @@ from supabase import create_client, Client
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-# 1. IMMEDIATE ENV LOAD (With explicit path safety)
+# 1. IMMEDIATE ENV LOAD
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '.env'))
 
 app = Flask(__name__)
-
-# Enable CORS so your React frontend can fetch data securely
 CORS(app)
 
-# 2. HELPER FUNCTIONS (Defined before routes use them)
+
+# 2. HELPER FUNCTIONS
 def parse_project_csv(csv_text_content):
-    """
-    Parses raw CSV string content from a multipart file stream
-    and returns a clean, structured dictionary of project metadata.
-    """
     csv_file = io.StringIO(csv_text_content)
     reader = csv.DictReader(csv_file)
     for row in reader:
-        # Strip whitespace from keys and values safely
         clean_row = {k.strip(): v.strip() for k, v in row.items() if k and v}
 
-        # 1. Parse Semi-Colon Delimited Lists Safely
-        if 'tech_stack' in clean_row:
-            clean_row['tech_stack'] = [tech.strip() for tech in clean_row['tech_stack'].split(';') if tech.strip()]
-        else:
-            clean_row['tech_stack'] = []
-
-        if 'architecture_tags' in clean_row:
-            clean_row['architecture_tags'] = [tag.strip() for tag in clean_row['architecture_tags'].split(';') if
-                                              tag.strip()]
-        else:
-            clean_row['architecture_tags'] = []
-
-        if 'screenshots' in clean_row:
-            clean_row['screenshots'] = [shot.strip() for shot in clean_row['screenshots'].split(';') if shot.strip()]
-        else:
-            clean_row['screenshots'] = []
+        # Parse Lists
+        clean_row['tech_stack'] = [t.strip() for t in clean_row.get('tech_stack', '').split(';') if t.strip()]
+        clean_row['architecture_tags'] = [t.strip() for t in clean_row.get('architecture_tags', '').split(';') if
+                                          t.strip()]
+        clean_row['screenshots'] = [s.strip() for s in clean_row.get('screenshots', '').split(';') if s.strip()]
 
         return clean_row
     return None
 
+
 # 3. INITIALIZE CLIENT
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-
-print(f"--- DEBUG TELEMETRY ---")
-print(f"Supabase URL Loaded: {SUPABASE_URL}")
-print(f"Supabase Key Loaded: {'Successfully Found Key!' if SUPABASE_KEY else 'MISSING/EMPTY'}")
-print(f"-----------------------")
-
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 4. API ROUTE DECLARATIONS
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({"status": "healthy", "message": "Portfolio API Engine running smoothly."})
 
-
-@app.route('/api/projects', methods=['GET'])
-def get_projects():
-    try:
-        response = supabase.table("projects").select("*").execute()
-        return jsonify(response.data), 200
-    except Exception as e:
-        return jsonify({"error": f"Failed to fetch live database records: {str(e)}"}), 500
-
-@app.route('/api/youtube', methods=['GET'])
-def get_youtube_videos():
-    return jsonify({"message": "YouTube sync endpoint ready."})
-
-@app.route('/api/twitch', methods=['GET'])
-def get_twitch_status():
-    return jsonify({"is_live": False, "message": "Twitch sync endpoint ready."})
-
-
+# 4. API ROUTE
 @app.route('/api/admin/sync-project', methods=['POST'])
 def sync_project_pipeline():
     try:
         if 'info_csv' not in request.files:
-            return jsonify({"error": "Missing mandatory info.csv execution file"}), 400
+            return jsonify({"error": "Missing info.csv"}), 400
 
-        csv_file = request.files['info_csv']
-        csv_text = csv_file.read().decode('utf-8')
-
-        project_data = parse_project_csv(csv_text)
+        project_data = parse_project_csv(request.files['info_csv'].read().decode('utf-8'))
         if not project_data:
-            return jsonify({"error": "Failed to parse metadata or CSV format is empty"}), 400
+            return jsonify({"error": "Failed to parse CSV"}), 400
 
         title = project_data.get('title')
-        project_type = project_data.get('project_type', 'web')
-        binary_filename = project_data.get('binary_filename')
-        gif_filename = project_data.get('gif_filename')
-        screenshot_filenames = project_data.get('screenshots', [])
 
-        download_url = None
-        gif_url = None
-        screenshot_urls = []
+        # Helper to handle the "Force Delete -> Upload" pattern
+        def upload_asset(file_key, folder, content_type):
+            if file_key in request.files:
+                file_obj = request.files[file_key]
+                file_bytes = file_obj.read()
+                path = f"{folder}/{secure_filename(title)}/{secure_filename(file_obj.filename)}"
 
-        # 1. Pipeline Stream for Binary Application File (.apk / .zip)
-        if binary_filename and binary_filename in request.files:
-            asset_file = request.files[binary_filename]
-            file_bytes = asset_file.read()
-            bucket_path = f"installers/{secure_filename(title)}/{secure_filename(binary_filename)}"
+                # Try to remove old file to avoid 400 error
+                try:
+                    supabase.storage.from_("portfolio-assets").remove([path])
+                except Exception:
+                    pass
 
-            supabase.storage.from_("portfolio-assets").upload(
-                path=bucket_path,
-                file=file_bytes,
-                file_options={"content-type": "application/octet-stream", "x-upsert": "true"}
-            )
-            download_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
-
-        # 2. Pipeline Stream for Animated Hero Graphic (.gif)
-        if gif_filename and gif_filename in request.files:
-            gif_file = request.files[gif_filename]
-            gif_bytes = gif_file.read()
-            bucket_path = f"visuals/{secure_filename(title)}/{secure_filename(gif_filename)}"
-
-            supabase.storage.from_("portfolio-assets").upload(
-                path=bucket_path,
-                file=gif_bytes,
-                file_options={"content-type": "image/gif", "x-upsert": "true"}
-            )
-            gif_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
-
-        # 3. Loop and Upload Multiple Screenshots
-        for shot_name in screenshot_filenames:
-            if shot_name in request.files:
-                shot_file = request.files[shot_name]
-                shot_bytes = shot_file.read()
-                bucket_path = f"screenshots/{secure_filename(title)}/{secure_filename(shot_name)}"
-
+                # Upload fresh
                 supabase.storage.from_("portfolio-assets").upload(
-                    path=bucket_path,
-                    file=shot_bytes,
-                    file_options={"content-type": "image/png", "x-upsert": "true"}
+                    path=path,
+                    file=file_bytes,
+                    file_options={"content-type": content_type}
                 )
-                public_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
-                screenshot_urls.append(public_url)
+                return supabase.storage.from_("portfolio-assets").get_public_url(path)
+            return None
 
-        # 4. Consolidate into DB Payload (FIX: Aligned outside of screenshot loop)
+        # Process Assets
+        download_url = upload_asset('binary_filename', 'installers', 'application/octet-stream')
+        gif_url = upload_asset('gif_filename', 'visuals', 'image/gif')
+
+        screenshot_urls = []
+        for shot in project_data.get('screenshots', []):
+            url = upload_asset(shot, 'screenshots', 'image/png')
+            if url: screenshot_urls.append(url)
+
+        # Consolidate and Upsert
         db_payload = {
             "title": title,
-            "project_type": project_type,
+            "project_type": project_data.get('project_type', 'web'),
             "description": project_data.get('description'),
-            "tech_stack": project_data.get('tech_stack', []),
-            "architecture_tags": project_data.get('architecture_tags', []),
+            "tech_stack": project_data.get('tech_stack'),
+            "architecture_tags": project_data.get('architecture_tags'),
             "github_url": project_data.get('github_url'),
             "live_url": project_data.get('live_url'),
-            "developer_notes": project_data.get('developer_notes'),
-            "download_url": download_url if download_url else project_data.get('download_url'),
-            "gif_url": gif_url if gif_url else project_data.get('gif_url'),
-            "screenshot_urls": screenshot_urls if screenshot_urls else project_data.get('screenshot_urls', [])
+            "download_url": download_url,
+            "gif_url": gif_url,
+            "screenshot_urls": screenshot_urls
         }
 
-        # Let native upsert run cleanly without legacy execution chains
+        # Committing to Database
         supabase.table("projects").upsert(db_payload, on_conflict="title").execute()
 
-        return jsonify({
-            "status": "success",
-            "message": f"Successfully synchronized project components for: {title}",
-            "payload": db_payload
-        }), 200
+        return jsonify({"status": "success", "message": "Pipeline complete"}), 200
 
     except Exception as e:
-        return jsonify({"error": f"Internal pipeline execution error: {str(e)}"}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=5000)
