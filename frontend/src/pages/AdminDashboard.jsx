@@ -144,26 +144,31 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleFolderSelect = async (fileList) => {
+const handleFolderSelect = async (fileList) => {
         if (uploading) return;
         setUploading(true);
         setError(null);
 
         try {
             const formData = new FormData();
+            let hasInfoCsv = false;
             
             for (let i = 0; i < fileList.length; i++) {
                 const file = fileList[i];
                 
-                // Extract file name out of its relative structure
-                if (file.name === 'info.csv') {
+                // Extract clean base filename regardless of nested folder string paths
+                const baseName = file.name.split('/').pop().split('\\').pop();
+                
+                if (baseName.toLowerCase() === 'info.csv') {
                     formData.append('info_csv', file);
+                    hasInfoCsv = true;
                 } else {
-                    formData.append(file.name, file);
+                    // Use clean baseName as the parameter key for backend streaming matching
+                    formData.append(baseName, file);
                 }
             }
 
-            if (!formData.has('info_csv')) {
+            if (!hasInfoCsv) {
                 throw new Error("Missing mandatory 'info.csv' configuration file in selected directory.");
             }
 
