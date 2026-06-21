@@ -162,7 +162,7 @@ def sync_project_pipeline():
         }
 
         # Let native upsert run cleanly without legacy execution chains
-        supabase.table("projects").upsert(db_payload, on_conflict="title")
+        supabase.table("projects").upsert(db_payload, on_conflict="title").execute()
 
         return jsonify({
             "status": "success",
