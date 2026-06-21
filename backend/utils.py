@@ -13,6 +13,8 @@ def parse_project_csv(csv_text_content):
             clean_row['tech_stack'] = [t.strip() for t in clean_row['tech_stack'].split(';') if t.strip()]
         if 'architecture_tags' in clean_row:
             clean_row['architecture_tags'] = [a.strip() for a in clean_row['architecture_tags'].split(';') if a.strip()]
+        if 'screenshots' in clean_row:
+            clean_row['screenshots'] = [s.strip() for s in clean_row['screenshots'].split(';') if s.strip()]
 
         return clean_row
     return None

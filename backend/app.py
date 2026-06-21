@@ -99,9 +99,11 @@ def sync_project_pipeline():
         project_type = project_data.get('project_type', 'web')
         binary_filename = project_data.get('binary_filename')
         gif_filename = project_data.get('gif_filename')
+        screenshot_filenames = project_data.get('screenshots', [])
 
         download_url = None
         gif_url = None
+        screenshot_urls = []
 
         # 1. Pipeline Stream for Binary Application File (.apk / .zip)
         if binary_filename and binary_filename in request.files:
@@ -127,7 +129,22 @@ def sync_project_pipeline():
             )
             gif_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
 
-        # 3. Consolidate into DB Payload Matching Your Expanded Schema
+        # 3. Loop and Upload Multiple Screenshots
+        for shot_name in screenshot_filenames:
+            if shot_name in request.files:
+                shot_file = request.files[shot_name]
+                shot_bytes = shot_file.read()
+                # Store inside a dedicated screenshots folder inside your bucket
+                bucket_path = f"screenshots/{secure_filename(title)}/{secure_filename(shot_name)}"
+
+                supabase.storage.from_("portfolio-assets").upload(
+                    path=bucket_path, file=shot_bytes,
+                    file_options={"content-type": "image/png", "upsert": "true"}
+                )
+                public_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
+                screenshot_urls.append(public_url)
+
+        # 4. Consolidate into DB Payload Matching Your Expanded Schema
         db_payload = {
             "title": title,
             "project_type": project_type,
@@ -138,7 +155,8 @@ def sync_project_pipeline():
             "live_url": project_data.get('live_url'),
             "developer_notes": project_data.get('developer_notes'),
             "download_url": download_url if download_url else project_data.get('download_url'),
-            "gif_url": gif_url if gif_url else project_data.get('gif_url')
+            "gif_url": gif_url if gif_url else project_data.get('gif_url'),
+            "screenshot_urls": screenshot_urls if screenshot_urls else project_data.get('screenshot_urls', [])
         }
 
         supabase.table("projects").upsert(db_payload, on_conflict="title").execute()
