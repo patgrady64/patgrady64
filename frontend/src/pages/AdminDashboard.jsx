@@ -171,46 +171,57 @@ return (
                   </tr>
                 </thead>
                 <tbody className="text-sm divide-y divide-gray-900">
-                  {projects.map((project) => (
-                    <tr key={project.id || project.title} className="hover:bg-gray-900/40 transition-colors duration-150 group">
-                      <td className="p-4">
-                        <div className="font-bold text-white group-hover:text-emerald-400 transition-colors">
-                          {project.title}
+                {projects.map((project) => (
+                  <tr key={project.id || project.title} className="hover:bg-gray-900/40 transition-colors duration-150 group text-xs">
+                    <td className="p-4">
+                      <div className="font-bold text-sm text-white group-hover:text-emerald-400 transition-colors">
+                        {project.title}
+                      </div>
+                      <div className="text-xs text-gray-400 max-w-xs truncate mt-0.5">
+                        {project.description}
+                      </div>
+                      {project.developer_notes && (
+                        <div className="text-[10px] font-mono text-gray-500 italic mt-1 max-w-xs truncate">
+                          Note: {project.developer_notes}
                         </div>
-                        <div className="text-xs text-gray-400 max-w-xs truncate mt-0.5">
-                          {project.description}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-mono uppercase font-semibold bg-gray-900 border border-gray-800 text-slate-300">
-                          {project.project_type || 'web'}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex flex-wrap gap-1.5 max-w-xs">
-                          {project.tech_stack?.map((tech, idx) => (
-                            <span key={idx} className="text-[11px] bg-slate-900/60 text-slate-400 px-2 py-0.5 rounded border border-slate-800/60">
-                              {tech}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="p-4 font-mono text-xs text-gray-400">
-                        {project.download_url || project.live_url || project.apk_url ? (
-                          <a 
-                            href={project.download_url || project.live_url || project.apk_url} 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="text-blue-400 hover:underline inline-flex items-center gap-1"
-                          >
-                            Link Available ↗
-                          </a>
-                        ) : (
-                          <span className="text-gray-600">None Configured</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase font-semibold bg-gray-900 border border-gray-800 text-slate-300">
+                        {project.project_type || 'web'}
+                      </span>
+                    </td>
+                    <td className="p-4 space-y-1.5">
+                      {/* Tech Stack List */}
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {project.tech_stack?.map((tech, idx) => (
+                          <span key={idx} className="text-[10px] bg-slate-900/60 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800/60">
+                            {tech}
+                          </span>
+                        ))}
+                      </div>
+                      {/* Architecture Patterns List */}
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {project.architecture_tags?.map((arch, idx) => (
+                          <span key={idx} className="text-[10px] bg-purple-950/20 text-purple-400 px-1.5 py-0.5 rounded border border-purple-900/30 font-mono">
+                            {arch}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-4 font-mono text-xs text-gray-400 space-y-1">
+                      {project.github_url && (
+                        <div><a href={project.github_url} target="_blank" rel="noreferrer" className="text-slate-400 hover:underline">Code ↗</a></div>
+                      )}
+                      {project.download_url && (
+                        <div><a href={project.download_url} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Binary ↗</a></div>
+                      )}
+                      {project.gif_url && (
+                        <div><a href={project.gif_url} target="_blank" rel="noreferrer" className="text-amber-400 hover:underline">Hero Visual ↗</a></div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
                 </tbody>
               </table>
             </div>

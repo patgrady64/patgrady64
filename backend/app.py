@@ -81,6 +81,7 @@ def get_youtube_videos():
 def get_twitch_status():
     return jsonify({"is_live": False, "message": "Twitch sync endpoint ready."})
 
+
 @app.route('/api/admin/sync-project', methods=['POST'])
 def sync_project_pipeline():
     try:
@@ -97,37 +98,54 @@ def sync_project_pipeline():
         title = project_data.get('title')
         project_type = project_data.get('project_type', 'web')
         binary_filename = project_data.get('binary_filename')
+        gif_filename = project_data.get('gif_filename')
 
         download_url = None
+        gif_url = None
 
-        if binary_filename and 'binary_asset' in request.files:
-            asset_file = request.files['binary_asset']
+        # 1. Pipeline Stream for Binary Application File (.apk / .zip)
+        if binary_filename and binary_filename in request.files:
+            asset_file = request.files[binary_filename]
             file_bytes = asset_file.read()
+            bucket_path = f"installers/{secure_filename(title)}/{secure_filename(binary_filename)}"
 
-            bucket_destination_path = f"installers/{secure_filename(title)}/{secure_filename(binary_filename)}"
-
-            storage_response = supabase.storage.from_("portfolio-assets").upload(
-                path=bucket_destination_path,
-                file=file_bytes,
+            supabase.storage.from_("portfolio-assets").upload(
+                path=bucket_path, file=file_bytes,
                 file_options={"content-type": "application/octet-stream", "upsert": "true"}
             )
+            download_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
 
-            download_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_destination_path)
+        # 2. Pipeline Stream for Animated Hero Graphic (.gif)
+        if gif_filename and gif_filename in request.files:
+            gif_file = request.files[gif_filename]
+            gif_bytes = gif_file.read()
+            bucket_path = f"visuals/{secure_filename(title)}/{secure_filename(gif_filename)}"
 
+            supabase.storage.from_("portfolio-assets").upload(
+                path=bucket_path, file=gif_bytes,
+                file_options={"content-type": "image/gif", "upsert": "true"}
+            )
+            gif_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
+
+        # 3. Consolidate into DB Payload Matching Your Expanded Schema
         db_payload = {
             "title": title,
             "project_type": project_type,
             "description": project_data.get('description'),
             "tech_stack": project_data.get('tech_stack', []),
+            "architecture_tags": project_data.get('architecture_tags', []),
+            "github_url": project_data.get('github_url'),
             "live_url": project_data.get('live_url'),
-            "download_url": download_url if download_url else project_data.get('download_url')
+            "developer_notes": project_data.get('developer_notes'),
+            "download_url": download_url if download_url else project_data.get('download_url'),
+            "gif_url": gif_url if gif_url else project_data.get('gif_url')
         }
 
-        db_result = supabase.table("projects").upsert(db_payload, on_conflict="title").execute()
+        supabase.table("projects").upsert(db_payload, on_conflict="title").execute()
 
         return jsonify({
             "status": "success",
-            "message": f"Successfully synchronized project: {title}",
+            "message": f"Successfully synchronized project components for: {title}",
             "payload": db_payload
         }), 200
 
