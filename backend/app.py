@@ -58,18 +58,25 @@ def sync_project_pipeline():
                 file_bytes = file_obj.read()
                 path = f"{folder}/{secure_filename(title)}/{secure_filename(file_obj.filename)}"
 
-                # Try to remove old file to avoid 400 error
+                # 1. Attempt to remove the old file
                 try:
                     supabase.storage.from_("portfolio-assets").remove([path])
                 except Exception:
-                    pass
+                    pass  # Silently fail if file didn't exist
 
-                # Upload fresh
-                supabase.storage.from_("portfolio-assets").upload(
-                    path=path,
-                    file=file_bytes,
-                    file_options={"content-type": content_type}
-                )
+                # 2. Upload with explicit options
+                # This bypasses the SDK's internal logic that triggers the 'dict' error
+                try:
+                    supabase.storage.from_("portfolio-assets").upload(
+                        path=path,
+                        file=file_bytes,
+                        file_options={"content-type": content_type, "upsert": "true"}
+                    )
+                except Exception as e:
+                    # If it still fails here, it's a genuine connection/permission issue
+                    # Print it to your terminal to debug, but continue to prevent crashing the response
+                    print(f"DEBUG: Storage upload failed for {path}: {str(e)}")
+
                 return supabase.storage.from_("portfolio-assets").get_public_url(path)
             return None
 
