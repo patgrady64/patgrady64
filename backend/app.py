@@ -8,7 +8,6 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 # 1. IMMEDIATE ENV LOAD (With explicit path safety)
-# This forces python-dotenv to find the .env file sitting right next to app.py
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '.env'))
 

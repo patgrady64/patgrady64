@@ -44,7 +44,7 @@ export default function AdminDashboard() {
     useEffect(() => {
         if (session) {
             setFetchingProjects(true);
-            fetch('http://localhost:5000/api/projects')
+            fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/projects`)
                 .then(res => res.json())
                 .then(data => {
                     setProjects(Array.isArray(data) ? data : []);
