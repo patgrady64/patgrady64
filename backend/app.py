@@ -6,6 +6,7 @@ from werkzeug.utils import secure_filename
 from supabase import create_client, Client
 from flask_cors import CORS
 from dotenv import load_dotenv
+import traceback
 
 # 1. SETUP
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -51,7 +52,11 @@ def get_projects():
         response = supabase.table("projects").select("*").execute()
         return jsonify(response.data), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }), 500
 
 
 @app.route('/api/admin/sync-project', methods=['POST'])
