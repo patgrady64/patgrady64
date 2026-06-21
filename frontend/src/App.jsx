@@ -27,24 +27,62 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
-      {/* Hero Section */}
-      <header className="max-w-6xl mx-auto px-4 py-16 text-center md:text-left md:flex md:items-center md:justify-between border-b border-gray-800">
-        <div>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">Patrick R Grady</h1>
-          <p className="text-xl text-emerald-400 mt-2 font-medium">Software Engineer / AI Integration Specialist</p>
-          <p className="text-gray-400 mt-4 max-w-xl leading-relaxed">
-            Building full-stack tools and interactive mobile experiences. When I'm not writing code, 
-            you can usually find me analyzing routing logic and racing retro game randomizers like 
-            <span className="text-amber-400 font-semibold"> Zelda 1 Randomizer (Z1R)</span> and 
-            <span className="text-amber-400 font-semibold"> Super Mario Bros 3 Randomizer (SMB3R)</span>.
-          </p>
-          <div className="flex gap-4 mt-6 justify-center md:justify-start">
-            <a href="https://github.com" className="flex items-center gap-2 text-gray-400 hover:text-white transition">
-              <FontAwesomeIcon icon={faGithub} className="text-xl" /> GitHub
-            </a>
-            <a href="https://linkedin.com" className="flex items-center gap-2 text-gray-400 hover:text-white transition">
-              <FontAwesomeIcon icon={faLinkedin} className="text-xl" /> LinkedIn
-            </a>
+      <header className="relative overflow-hidden border-b border-gray-800/80 bg-gradient-to-b from-slate-950 via-gray-900 to-gray-900 py-20 px-4">
+        {/* Background Decorative Mesh Glows */}
+        <div className="absolute top-0 left-1/4 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 right-1/4 translate-y-1/2 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="max-w-6xl mx-auto relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
+          <div className="max-w-2xl text-center md:text-left">
+            {/* Live API Telemetry Status Pill */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/5 border border-emerald-500/20 text-xs font-semibold text-emerald-400 mb-6 tracking-wide backdrop-blur-sm animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
+              API ENGINE: OPERATIONAL
+            </div>
+
+            {/* Gradient Text Header */}
+            <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-none">
+              Patrick R. <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-teal-300 to-purple-400">Grady</span>
+            </h1>
+            
+            <p className="text-xl md:text-2xl text-slate-300 mt-3 font-semibold tracking-wide">
+              Software Engineer <span className="text-emerald-500/40 font-light">|</span> AI Integration Specialist
+            </p>
+
+            {/* Structured Professional & Personality Bio */}
+            <p className="text-gray-400 mt-6 leading-relaxed text-base md:text-lg max-w-xl">
+              Building dynamic full-stack infrastructure and highly optimized mobile applications. 
+              Focused on algorithmic structural execution and intelligent workflows. 
+            </p>
+            
+            <p className="text-gray-400 mt-3 leading-relaxed text-base md:text-lg max-w-xl">
+              When the compiler rests, I reverse-engineer retro game architecture—analyzing routing logic, 
+              seed pacing, and combat mechanics for <span className="text-amber-400 font-medium">Zelda 1</span> and <span className="text-amber-400 font-medium">Super Mario Bros. 3</span> Randomizers.
+            </p>
+
+            {/* Modern Social Action Row */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-8">
+              <a href="https://github.com" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-700 hover:border-gray-600 shadow-md transition-all duration-200">
+                <FontAwesomeIcon icon={faGithub} className="text-lg" /> GitHub Profile
+              </a>
+              <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-200 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-800 hover:border-gray-700 transition-all duration-200">
+                <FontAwesomeIcon icon={faLinkedin} className="text-lg text-blue-400" /> LinkedIn Network
+              </a>
+            </div>
+          </div>
+
+          {/* Interactive Side Overview Dashboard */}
+          <div className="w-full md:w-80 bg-gray-950/40 border border-gray-800 rounded-2xl p-6 backdrop-blur-md shadow-2xl self-start md:self-auto">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest border-b border-gray-800 pb-2 mb-4 flex items-center justify-between">
+              <span>Environment Profile</span>
+              <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono">v1.0.0</span>
+            </h3>
+            <ul className="space-y-3 font-mono text-xs">
+              <li className="flex justify-between"><span className="text-gray-500">Focus:</span> <span className="text-emerald-400">AI & Software Eng.</span></li>
+              <li className="flex justify-between"><span className="text-gray-500">Frameworks:</span> <span className="text-slate-300">React, Flask, Supabase</span></li>
+              <li className="flex justify-between"><span className="text-gray-500">Languages:</span> <span className="text-slate-300">Python, Kotlin</span></li>
+              <li className="flex justify-between"><span className="text-gray-500">Routing Target:</span> <span className="text-amber-400">Z1R / SMB3R</span></li>
+            </ul>
           </div>
         </div>
       </header>
