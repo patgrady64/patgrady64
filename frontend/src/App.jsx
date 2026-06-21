@@ -30,11 +30,13 @@ function App() {
     fetch(`${API_URL}/api/projects`)
       .then((res) => res.json())
       .then((data) => {
-        setProjects(data);
+        // Safe check: Only set if the backend returned an actual array
+        setProjects(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch((err) => {
         console.error("Error fetching projects:", err);
+        setProjects([]); // Fallback to safe array on network/server failures
         setLoading(false);
       });
   }, [API_URL]);
@@ -162,7 +164,7 @@ function App() {
 
                     {/* Tech Stack Badges */}
                     <div className="flex flex-wrap gap-2 mt-5">
-                      {project.tech_stack.map((tech, idx) => (
+                      {(project.tech_stack || []).map((tech, idx) => (
                         <span 
                           key={idx} 
                           className="font-mono text-[11px] font-medium text-emerald-400 bg-emerald-500/5 px-2.5 py-1 rounded-md border border-emerald-500/10 shadow-sm"

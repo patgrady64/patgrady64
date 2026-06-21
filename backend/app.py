@@ -115,9 +115,10 @@ def sync_project_pipeline():
             file_bytes = asset_file.read()
             bucket_path = f"installers/{secure_filename(title)}/{secure_filename(binary_filename)}"
 
+            # FIX: Changed "upsert": "true" string to boolean True
             supabase.storage.from_("portfolio-assets").upload(
                 path=bucket_path, file=file_bytes,
-                file_options={"content-type": "application/octet-stream", "upsert": "true"}
+                file_options={"content-type": "application/octet-stream", "upsert": True}
             )
             download_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
 
@@ -127,9 +128,10 @@ def sync_project_pipeline():
             gif_bytes = gif_file.read()
             bucket_path = f"visuals/{secure_filename(title)}/{secure_filename(gif_filename)}"
 
+            # FIX: Changed "upsert": "true" string to boolean True
             supabase.storage.from_("portfolio-assets").upload(
                 path=bucket_path, file=gif_bytes,
-                file_options={"content-type": "image/gif", "upsert": "true"}
+                file_options={"content-type": "image/gif", "upsert": True}
             )
             gif_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
 
@@ -141,9 +143,10 @@ def sync_project_pipeline():
                 # Store inside a dedicated screenshots folder inside your bucket
                 bucket_path = f"screenshots/{secure_filename(title)}/{secure_filename(shot_name)}"
 
+                # FIX: Changed "upsert": "true" string to boolean True
                 supabase.storage.from_("portfolio-assets").upload(
                     path=bucket_path, file=shot_bytes,
-                    file_options={"content-type": "image/png", "upsert": "true"}
+                    file_options={"content-type": "image/png", "upsert": True}
                 )
                 public_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
                 screenshot_urls.append(public_url)
