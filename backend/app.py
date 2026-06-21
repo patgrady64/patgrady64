@@ -58,24 +58,22 @@ def sync_project_pipeline():
                 file_bytes = file_obj.read()
                 path = f"{folder}/{secure_filename(title)}/{secure_filename(file_obj.filename)}"
 
-                # 1. Attempt to remove the old file
                 try:
+                    # Attempt delete to avoid 'File Already Exists' 400 error
                     supabase.storage.from_("portfolio-assets").remove([path])
-                except Exception:
-                    pass  # Silently fail if file didn't exist
+                except:
+                    pass
 
-                # 2. Upload with explicit options
-                # This bypasses the SDK's internal logic that triggers the 'dict' error
+                # Perform upload without relying on the broken SDK 'upsert' logic
                 try:
                     supabase.storage.from_("portfolio-assets").upload(
                         path=path,
                         file=file_bytes,
-                        file_options={"content-type": content_type, "upsert": "true"}
+                        file_options={"content-type": content_type}
                     )
                 except Exception as e:
-                    # If it still fails here, it's a genuine connection/permission issue
-                    # Print it to your terminal to debug, but continue to prevent crashing the response
-                    print(f"DEBUG: Storage upload failed for {path}: {str(e)}")
+                    # If this still fails, print the actual error to your terminal logs
+                    print(f"DEBUG: Storage upload error: {e}")
 
                 return supabase.storage.from_("portfolio-assets").get_public_url(path)
             return None
@@ -108,6 +106,19 @@ def sync_project_pipeline():
 
         return jsonify({"status": "success", "message": "Pipeline complete"}), 200
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/', methods=['GET'])
+def index():
+    return jsonify({"message": "API is online"}), 200
+
+@app.route('/api/projects', methods=['GET'])
+def get_projects():
+    try:
+        # This matches the fetch call in your App.jsx
+        response = supabase.table("projects").select("*").execute()
+        return jsonify(response.data), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
