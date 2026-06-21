@@ -11,6 +11,7 @@ export default function AdminDashboard() {
 
     const [projects, setProjects] = useState([]);
     const [fetchingProjects, setFetchingProjects] = useState(false);
+    const [uploading, setUploading] = useState(false);
 
     // Check for an active session when the page loads
     useEffect(() => {
@@ -40,8 +41,8 @@ export default function AdminDashboard() {
         await supabase.auth.signOut();
     };
 
-    // Fetch projects from backend on load
-    useEffect(() => {
+    // Fetch projects from live production database API
+    const fetchProjects = () => {
         if (session) {
             setFetchingProjects(true);
             fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/projects`)
@@ -55,7 +56,99 @@ export default function AdminDashboard() {
                     setFetchingProjects(false);
                 });
         }
+    };
+
+    useEffect(() => {
+        fetchProjects();
     }, [session]);
+
+    // --- DRAG AND DROP PIPELINE INTERCEPT HANDLERS ---
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDrop = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (uploading) return;
+        
+        const items = e.dataTransfer.items;
+        if (!items || items.length === 0) return;
+
+        setUploading(true);
+        setError(null);
+
+        try {
+            const formData = new FormData();
+            const filePromises = [];
+
+            // Helper function to recursively read files from directories (DataTransferItem/FileSystemEntry API)
+            const traverseDirectory = (entry, path = "") => {
+                return new Promise((resolve, reject) => {
+                    if (entry.isFile) {
+                        entry.file((file) => {
+                            // Map the plain file object into the proper target parameter name for our endpoint
+                            if (file.name === 'info.csv') {
+                                formData.append('info_csv', file);
+                            } else {
+                                formData.append(file.name, file);
+                            }
+                            resolve();
+                        }, reject);
+                    } else if (entry.isDirectory) {
+                        const dirReader = entry.createReader();
+                        dirReader.readEntries(async (entries) => {
+                            const promises = entries.map(innerEntry => 
+                                traverseDirectory(innerEntry, `${path}${entry.name}/`)
+                            );
+                            await Promise.all(promises);
+                            resolve();
+                        }, reject);
+                    }
+                });
+            };
+
+            // Loop over all top-level items dropped into the layout zone
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.kind === 'file') {
+                    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+                    if (entry) {
+                        filePromises.push(traverseDirectory(entry));
+                    }
+                }
+            }
+
+            await Promise.all(filePromises);
+
+            if (!formData.has('info_csv')) {
+                throw new Error("Missing mandatory 'info.csv' configuration file in dropped structure.");
+            }
+
+            // Fire multi-part form package directly to Flask endpoint pipeline
+            const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin/sync-project`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(result.error || "Inversion pipeline failed to process directory files.");
+            }
+
+            console.log("Ingestion Synchronized Successfully:", result);
+            fetchProjects(); // Reload table data seamlessly
+            
+        } catch (err) {
+            console.error("Dropzone Error:", err);
+            setError(err.message);
+        } finally {
+            setUploading(false);
+        }
+    };
 
     // --- 1. LOGIN SCREEN ---
     if (!session) {
@@ -85,149 +178,159 @@ export default function AdminDashboard() {
     }
 
     // --- 2. PROTECTED ADMIN PANEL ---
-return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 font-sans p-6 sm:p-12">
-      <div className="max-w-4xl mx-auto space-y-8">
-        
-        {/* Header Console Row */}
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 pb-6">
-          <div>
-            <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
-              <Terminal className="text-emerald-400 stroke-[2.5]" size={24} /> 
-              SYSTEM INGESTION ENGINE
-            </h1>
-            <p className="text-xs font-mono text-gray-500 mt-1 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              SECURE SESSION ACCESS // {session.user.email}
-            </p>
-          </div>
-          
-          <button 
-            onClick={handleLogout}
-            className="flex items-center justify-center gap-2 font-mono text-xs text-red-400 hover:text-white bg-red-950/20 hover:bg-red-600 border border-red-900/40 hover:border-red-500 px-4 py-2 rounded-xl transition-all duration-200 self-start sm:self-auto shadow-md"
-          >
-            <LogOut size={14} /> Sign Out Terminal
-          </button>
-        </header>
-
-        {/* Dynamic Drag and Drop Asset Control */}
-        <main>
-          <div className="group relative bg-gradient-to-b from-gray-950/40 to-gray-950/80 border-2 border-dashed border-gray-800 hover:border-emerald-500/40 rounded-3xl p-12 text-center transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-950/5 flex flex-col items-center justify-center min-h-[340px]">
-            {/* Background Hover Accent Glow */}
-            <div className="absolute inset-0 bg-emerald-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-3xl pointer-events-none"></div>
-
-            <div className="relative z-10 max-w-sm mx-auto space-y-4">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center shadow-inner group-hover:border-emerald-500/20 group-hover:bg-gray-900/60 transition-colors duration-300">
-                <UploadCloud className="text-gray-500 group-hover:text-emerald-400 transition-colors duration-300 stroke-[1.5]" size={32} />
+    return (
+        <div className="min-h-screen bg-gray-900 text-gray-100 font-sans p-6 sm:p-12">
+          <div className="max-w-4xl mx-auto space-y-8">
+            
+            {/* Header Console Row */}
+            <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 pb-6">
+              <div>
+                <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
+                  <Terminal className="text-emerald-400 stroke-[2.5]" size={24} /> 
+                  SYSTEM INGESTION ENGINE
+                </h1>
+                <p className="text-xs font-mono text-gray-500 mt-1 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  SECURE SESSION ACCESS // {session.user.email}
+                </p>
               </div>
               
-              <div className="space-y-1.5">
-                <p className="text-base font-semibold text-slate-200">
-                  Drag & drop your project build folder
-                </p>
-                <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
-                  Provide a localized production directory containing a structural <span className="text-amber-400 font-mono">info.csv</span> file and compiled application assets.
-                </p>
+              <button 
+                onClick={handleLogout}
+                className="flex items-center justify-center gap-2 font-mono text-xs text-red-400 hover:text-white bg-red-950/20 hover:bg-red-600 border border-red-900/40 hover:border-red-500 px-4 py-2 rounded-xl transition-all duration-200 self-start sm:self-auto shadow-md"
+              >
+                <LogOut size={14} /> Sign Out Terminal
+              </button>
+            </header>
+
+            {/* Dynamic Drag and Drop Asset Control */}
+            <main>
+              <div 
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                className={`group relative bg-gradient-to-b from-gray-950/40 to-gray-950/80 border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-950/5 flex flex-col items-center justify-center min-h-[340px] ${
+                    uploading ? 'border-amber-500/50 bg-amber-950/5' : 'border-gray-800 hover:border-emerald-500/40'
+                }`}
+              >
+                <div className="absolute inset-0 bg-emerald-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-3xl pointer-events-none"></div>
+
+                <div className="relative z-10 max-w-sm mx-auto space-y-4">
+                  <div className={`w-16 h-16 mx-auto rounded-2xl bg-gray-900 border flex items-center justify-center shadow-inner transition-colors duration-300 ${
+                      uploading ? 'border-amber-500/30 bg-gray-900/40' : 'border-gray-800 group-hover:border-emerald-500/20 group-hover:bg-gray-900/60'
+                  }`}>
+                    <UploadCloud className={`transition-colors duration-300 stroke-[1.5] ${uploading ? 'text-amber-400 animate-bounce' : 'text-gray-500 group-hover:text-emerald-400'}`} size={32} />
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <p className="text-base font-semibold text-slate-200">
+                      {uploading ? 'Processing & streaming asset build...' : 'Drag & drop your project build folder'}
+                    </p>
+                    <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
+                      {error ? (
+                          <span className="text-red-400 font-mono block">{error}</span>
+                      ) : (
+                          <>Provide a localized production directory containing a structural <span className="text-amber-400 font-mono">info.csv</span> file and compiled application assets.</>
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Mini Pipeline Requirements Spec Pill */}
+                  <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-lg bg-gray-950 border border-gray-800 text-[10px] font-mono text-gray-400 shadow-inner">
+                    <span className="flex items-center gap-1"><FileCode size={11} className="text-emerald-400" /> info.csv</span>
+                    <span className="text-gray-700">|</span>
+                    <span className="flex items-center gap-1"><ShieldAlert size={11} className="text-purple-400" /> Build Asset</span>
+                  </div>
+                </div>
+              </div>
+            </main>
+
+            {/* Project Inventory System Console */}
+            <section className="bg-gray-950 border border-gray-800 rounded-3xl overflow-hidden shadow-xl">
+              <div className="border-b border-gray-800 bg-gray-900/50 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-sm font-mono font-bold tracking-wider text-gray-400 uppercase flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  Cloud Sync Inventory
+                </h2>
+                <span className="text-xs font-mono text-gray-500">
+                  {projects.length} Total Records Loaded
+                </h2>
               </div>
 
-              {/* Mini Pipeline Requirements Spec Pill */}
-              <div className="inline-flex items-center gap-3 px-3 py-1.5 rounded-lg bg-gray-950 border border-gray-800 text-[10px] font-mono text-gray-400 shadow-inner">
-                <span className="flex items-center gap-1"><FileCode size={11} className="text-emerald-400" /> info.csv</span>
-                <span className="text-gray-700">|</span>
-                <span className="flex items-center gap-1"><ShieldAlert size={11} className="text-purple-400" /> Build Asset</span>
-              </div>
-            </div>
-          </div>
-        </main>
-        {/* Project Inventory System Console */}
-        <section className="bg-gray-950 border border-gray-800 rounded-3xl overflow-hidden shadow-xl">
-          <div className="border-b border-gray-800 bg-gray-900/50 px-6 py-4 flex items-center justify-between">
-            <h2 className="text-sm font-mono font-bold tracking-wider text-gray-400 uppercase flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-              Cloud Sync Inventory
-            </h2>
-            <span className="text-xs font-mono text-gray-500">
-              {projects.length} Total Records Loaded
-            </span>
-          </div>
-
-          {fetchingProjects ? (
-            <div className="p-12 text-center text-sm font-mono text-gray-500">
-              Querying database registry...
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="p-12 text-center text-sm font-mono text-gray-500">
-              No project records detected in deployment environment database.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse font-sans">
-                <thead>
-                  <tr className="border-b border-gray-800 bg-gray-900/30 text-xs font-mono text-gray-400">
-                    <th className="p-4 font-semibold">Project Title</th>
-                    <th className="p-4 font-semibold">Type</th>
-                    <th className="p-4 font-semibold">Tech Stack</th>
-                    <th className="p-4 font-semibold">Target Distribution</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm divide-y divide-gray-900">
-                {projects.map((project) => (
-                  <tr key={project.id || project.title} className="hover:bg-gray-900/40 transition-colors duration-150 group text-xs">
-                    <td className="p-4">
-                      <div className="font-bold text-sm text-white group-hover:text-emerald-400 transition-colors">
-                        {project.title}
-                      </div>
-                      <div className="text-xs text-gray-400 max-w-xs truncate mt-0.5">
-                        {project.description}
-                      </div>
-                      {project.developer_notes && (
-                        <div className="text-[10px] font-mono text-gray-500 italic mt-1 max-w-xs truncate">
-                          Note: {project.developer_notes}
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase font-semibold bg-gray-900 border border-gray-800 text-slate-300">
-                        {project.project_type || 'web'}
-                      </span>
-                    </td>
-                    <td className="p-4 space-y-1.5">
-                      {/* Tech Stack List */}
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {project.tech_stack?.map((tech, idx) => (
-                          <span key={idx} className="text-[10px] bg-slate-900/60 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800/60">
-                            {tech}
+              {fetchingProjects ? (
+                <div className="p-12 text-center text-sm font-mono text-gray-500">
+                  Querying database registry...
+                </div>
+              ) : projects.length === 0 ? (
+                <div className="p-12 text-center text-sm font-mono text-gray-500">
+                  No project records detected in deployment environment database.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse font-sans">
+                    <thead>
+                      <tr className="border-b border-gray-800 bg-gray-900/30 text-xs font-mono text-gray-400">
+                        <th className="p-4 font-semibold">Project Title</th>
+                        <th className="p-4 font-semibold">Type</th>
+                        <th className="p-4 font-semibold">Tech Stack</th>
+                        <th className="p-4 font-semibold">Target Distribution</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm divide-y divide-gray-900">
+                    {projects.map((project) => (
+                      <tr key={project.id || project.title} className="hover:bg-gray-900/40 transition-colors duration-150 group text-xs">
+                        <td className="p-4">
+                          <div className="font-bold text-sm text-white group-hover:text-emerald-400 transition-colors">
+                            {project.title}
+                          </div>
+                          <div className="text-xs text-gray-400 max-w-xs truncate mt-0.5">
+                            {project.description}
+                          </div>
+                          {project.developer_notes && (
+                            <div className="text-[10px] font-mono text-gray-500 italic mt-1 max-w-xs truncate">
+                              Note: {project.developer_notes}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase font-semibold bg-gray-900 border border-gray-800 text-slate-300">
+                            {project.project_type || 'web'}
                           </span>
-                        ))}
-                      </div>
-                      {/* Architecture Patterns List */}
-                      <div className="flex flex-wrap gap-1 max-w-xs">
-                        {project.architecture_tags?.map((arch, idx) => (
-                          <span key={idx} className="text-[10px] bg-purple-950/20 text-purple-400 px-1.5 py-0.5 rounded border border-purple-900/30 font-mono">
-                            {arch}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-4 font-mono text-xs text-gray-400 space-y-1">
-                      {project.github_url && (
-                        <div><a href={project.github_url} target="_blank" rel="noreferrer" className="text-slate-400 hover:underline">Code ↗</a></div>
-                      )}
-                      {project.download_url && (
-                        <div><a href={project.download_url} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Binary ↗</a></div>
-                      )}
-                      {project.gif_url && (
-                        <div><a href={project.gif_url} target="_blank" rel="noreferrer" className="text-amber-400 hover:underline">Hero Visual ↗</a></div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
+                        </td>
+                        <td className="p-4 space-y-1.5">
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {project.tech_stack?.map((tech, idx) => (
+                              <span key={idx} className="text-[10px] bg-slate-900/60 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800/60">
+                                {tech}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap gap-1 max-w-xs">
+                            {project.architecture_tags?.map((arch, idx) => (
+                              <span key={idx} className="text-[10px] bg-purple-950/20 text-purple-400 px-1.5 py-0.5 rounded border border-purple-900/30 font-mono">
+                                {arch}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-4 font-mono text-xs text-gray-400 space-y-1">
+                          {project.github_url && (
+                            <div><a href={project.github_url} target="_blank" rel="noreferrer" className="text-slate-400 hover:underline">Code ↗</a></div>
+                          )}
+                          {project.download_url && (
+                            <div><a href={project.download_url} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Binary ↗</a></div>
+                          )}
+                          {project.gif_url && (
+                            <div><a href={project.gif_url} target="_blank" rel="noreferrer" className="text-amber-400 hover:underline">Hero Visual ↗</a></div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+    );
 }
