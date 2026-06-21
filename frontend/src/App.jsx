@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import ReactPlayer from 'react-player/youtube';
+import ReactPlayer from 'react-player';
 import { Github, Linkedin, Tv, Youtube, Download, ExternalLink, Code } from 'lucide-react';
 
 function App() {
