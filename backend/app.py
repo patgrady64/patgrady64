@@ -1,11 +1,36 @@
+import csv
+import io
 import os
-from flask import Flask, jsonify
+from flask import Flask, request, jsonify
+from werkzeug.utils import secure_filename
+from supabase import create_client, Client
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+# 1. IMMEDIATE ENV LOAD (With explicit path safety)
+# This forces python-dotenv to find the .env file sitting right next to app.py
+basedir = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(basedir, '.env'))
 
 app = Flask(__name__)
 
 # Enable CORS so your React frontend can fetch data securely
 CORS(app)
+
+# 2. HELPER FUNCTIONS (Defined before routes use them)
+def parse_project_csv(csv_text_content):
+    """
+    Parses raw CSV string content from a multipart file stream
+    and returns a clean, structured dictionary of project metadata.
+    """
+    csv_file = io.StringIO(csv_text_content)
+    reader = csv.DictReader(csv_file)
+    for row in reader:
+        clean_row = {k.strip(): v.strip() for k, v in row.items() if k}
+        if 'tech_stack' in clean_row:
+            clean_row['tech_stack'] = [tech.strip() for tech in clean_row['tech_stack'].split(';') if tech.strip()]
+        return clean_row
+    return None
 
 # Fallback sample data until you pull directly from your Supabase DB rows
 SAMPLE_PROJECTS = [
@@ -27,13 +52,25 @@ SAMPLE_PROJECTS = [
     }
 ]
 
+# 3. INITIALIZE CLIENT
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+# Safety check print statements to help us debug in the terminal
+print(f"--- DEBUG TELEMETRY ---")
+print(f"Supabase URL Loaded: {SUPABASE_URL}")
+print(f"Supabase Key Loaded: {'Successfully Found Key!' if SUPABASE_KEY else 'MISSING/EMPTY'}")
+print(f"-----------------------")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# 4. API ROUTE DECLARATIONS
 @app.route('/', methods=['GET'])
 def home():
     return jsonify({"status": "healthy", "message": "Portfolio API Engine running smoothly."})
 
 @app.route('/api/projects', methods=['GET'])
 def get_projects():
-    # Later, you will swap this out with your Supabase table query
     return jsonify(SAMPLE_PROJECTS)
 
 @app.route('/api/youtube', methods=['GET'])
@@ -44,7 +81,60 @@ def get_youtube_videos():
 def get_twitch_status():
     return jsonify({"is_live": False, "message": "Twitch sync endpoint ready."})
 
+@app.route('/api/admin/sync-project', methods=['POST'])
+def sync_project_pipeline():
+    try:
+        if 'info_csv' not in request.files:
+            return jsonify({"error": "Missing mandatory info.csv execution file"}), 400
+
+        csv_file = request.files['info_csv']
+        csv_text = csv_file.read().decode('utf-8')
+
+        project_data = parse_project_csv(csv_text)
+        if not project_data:
+            return jsonify({"error": "Failed to parse metadata or CSV format is empty"}), 400
+
+        title = project_data.get('title')
+        project_type = project_data.get('project_type', 'web')
+        binary_filename = project_data.get('binary_filename')
+
+        download_url = None
+
+        if binary_filename and 'binary_asset' in request.files:
+            asset_file = request.files['binary_asset']
+            file_bytes = asset_file.read()
+
+            bucket_destination_path = f"installers/{secure_filename(title)}/{secure_filename(binary_filename)}"
+
+            storage_response = supabase.storage.from_("portfolio-assets").upload(
+                path=bucket_destination_path,
+                file=file_bytes,
+                file_options={"content-type": "application/octet-stream", "upsert": "true"}
+            )
+
+            download_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_destination_path)
+
+        db_payload = {
+            "title": title,
+            "project_type": project_type,
+            "description": project_data.get('description'),
+            "tech_stack": project_data.get('tech_stack', []),
+            "live_url": project_data.get('live_url'),
+            "download_url": download_url if download_url else project_data.get('download_url')
+        }
+
+        db_result = supabase.table("projects").upsert(db_payload, on_conflict="title").execute()
+
+        return jsonify({
+            "status": "success",
+            "message": f"Successfully synchronized project: {title}",
+            "payload": db_payload
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Internal pipeline execution error: {str(e)}"}), 500
+
+# 5. SERVER START (Keep at the absolute bottom)
 if __name__ == '__main__':
-    # Grab port from environment for hosting environments, fallback to 5000 locally
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)

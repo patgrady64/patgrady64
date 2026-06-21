@@ -4,12 +4,26 @@ import { Tv, Download, ExternalLink, Code } from 'lucide-react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGithub, faLinkedin, faYoutube } from '@fortawesome/free-brands-svg-icons';
 
+import AdminDashboard from './pages/AdminDashboard';
+
 function App() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // 1. LIGHTWEIGHT STATE ROUTER
+  const [currentPath, setCurrentPath] = useState(window.location.hash || '#/');
 
   // Pull your Render API URL from environment variables
   const API_URL = import.meta.env.VITE_API_URL || '';
+
+  // Listen for hash changes in the URL (e.g. going to http://localhost:5173/#/admin)
+  useEffect(() => {
+    const handleHashChange = () => {
+      setCurrentPath(window.location.hash || '#/');
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   useEffect(() => {
     // Fetch project dynamic cards from your Flask API
@@ -25,8 +39,13 @@ function App() {
       });
   }, [API_URL]);
 
+  // 2. ROUTE CONDITIONAL RENDERING
+  if (currentPath === '#/admin') {
+    return <AdminDashboard />;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">Preferences: Open User Settings (JSON)
+    <div className="min-h-screen bg-gray-900 text-gray-100 font-sans">
       <header className="relative overflow-hidden border-b border-gray-800/80 bg-gradient-to-b from-slate-950 via-gray-900 to-gray-900 py-20 px-4">
         {/* Background Decorative Mesh Glows */}
         <div className="absolute top-0 left-1/4 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -85,12 +104,17 @@ function App() {
               <li className="flex justify-between"><span className="text-gray-500">Frameworks:</span> <span className="text-slate-300">React, Flask, Supabase</span></li>
               <li className="flex justify-between"><span className="text-gray-500">Languages:</span> <span className="text-slate-300">Python, Kotlin</span></li>
               <li className="flex justify-between"><span className="text-gray-500">Routing Target:</span> <span className="text-amber-400">Z1R / SMB3R</span></li>
+              {/* Secret Admin Shortcut Entry Point */}
+              <li className="flex justify-between pt-2 border-t border-gray-800/60">
+                <span className="text-gray-600">Console Pipeline:</span> 
+                <a href="#/admin" className="text-gray-500 hover:text-emerald-400 transition-colors duration-150">Open Admin →</a>
+              </li>
             </ul>
           </div>
         </div>
       </header>
 
-{/* Main Content Layout Container */}
+      {/* Main Content Layout Container */}
       <main className="max-w-6xl mx-auto px-6 py-16 space-y-20">
         
         {/* SECTION 1: SOFTWARE PORTFOLIO */}
@@ -159,22 +183,25 @@ function App() {
                       <div className="w-14 h-14 rounded-xl bg-gray-950 border border-gray-800/80 flex flex-col items-center justify-center text-[10px] font-mono text-gray-600 flex-shrink-0 select-none">
                         <span>NO</span>
                         <span>MOCK</span>
+                        <span>MOCK</span>
                       </div>
                     )}
 
                     <div className="flex items-center gap-2.5">
                       <a 
-                        href="#" 
+                        href={project.live_url || "#"} 
+                        target="_blank" 
+                        rel="noreferrer"
                         className="flex items-center gap-1.5 font-mono text-xs text-gray-400 hover:text-white bg-gray-950 hover:bg-gray-900 border border-gray-800 hover:border-gray-700 px-3 py-2 rounded-xl transition-all duration-200"
                       >
                         Code <ExternalLink size={13} className="text-gray-500" />
                       </a>
-                      {project.apk_url && (
+                      {project.download_url && (
                         <a 
-                          href={project.apk_url} 
+                          href={project.download_url} 
                           className="flex items-center gap-1.5 font-sans font-semibold text-xs text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-950/50 px-3.5 py-2 rounded-xl transition-all duration-200"
                         >
-                          <Download size={13} /> Deploy APK
+                          <Download size={13} /> Download Build
                         </a>
                       )}
                     </div>
