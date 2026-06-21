@@ -7,19 +7,25 @@ from supabase import create_client, Client
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-# 1. IMMEDIATE ENV LOAD
+# 1. SETUP
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '.env'))
 
 app = Flask(__name__)
 CORS(app)
 
+# 2. INITIALIZE CLIENT
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 2. HELPER FUNCTIONS
+
+# 3. HELPER FUNCTIONS
 def parse_project_csv(csv_text_content):
     csv_file = io.StringIO(csv_text_content)
     reader = csv.DictReader(csv_file)
     for row in reader:
+        # Strip whitespace from keys/values
         clean_row = {k.strip(): v.strip() for k, v in row.items() if k and v}
 
         # Parse Lists
@@ -32,13 +38,22 @@ def parse_project_csv(csv_text_content):
     return None
 
 
-# 3. INITIALIZE CLIENT
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# 4. API ROUTES
+
+@app.route('/', methods=['GET'])
+def index():
+    return jsonify({"message": "API is online"}), 200
 
 
-# 4. API ROUTE
+@app.route('/api/projects', methods=['GET'])
+def get_projects():
+    try:
+        response = supabase.table("projects").select("*").execute()
+        return jsonify(response.data), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/admin/sync-project', methods=['POST'])
 def sync_project_pipeline():
     try:
@@ -49,76 +64,46 @@ def sync_project_pipeline():
         if not project_data:
             return jsonify({"error": "Failed to parse CSV"}), 400
 
-        title = project_data.get('title')
+        title = secure_filename(project_data.get('title', 'project'))
 
-        # Helper to handle the "Force Delete -> Upload" pattern
-        def upload_asset(file_key, folder, content_type):
+        def upload_asset(file_key, folder, filename):
             if file_key in request.files:
                 file_obj = request.files[file_key]
-                file_bytes = file_obj.read()
-                path = f"{folder}/{secure_filename(title)}/{secure_filename(file_obj.filename)}"
+                path = f"{folder}/{title}/{secure_filename(filename)}"
 
                 try:
-                    # Attempt delete to avoid 'File Already Exists' 400 error
                     supabase.storage.from_("portfolio-assets").remove([path])
                 except:
                     pass
 
-                # Perform upload without relying on the broken SDK 'upsert' logic
-                try:
-                    supabase.storage.from_("portfolio-assets").upload(
-                        path=path,
-                        file=file_bytes,
-                        file_options={"content-type": content_type}
-                    )
-                except Exception as e:
-                    # If this still fails, print the actual error to your terminal logs
-                    print(f"DEBUG: Storage upload error: {e}")
-
+                supabase.storage.from_("portfolio-assets").upload(
+                    path=path,
+                    file=file_obj.read(),
+                    file_options={"content-type": "application/octet-stream"}
+                )
                 return supabase.storage.from_("portfolio-assets").get_public_url(path)
             return None
 
-        # Process Assets
-        download_url = upload_asset('binary_filename', 'installers', 'application/octet-stream')
-        gif_url = upload_asset('gif_filename', 'visuals', 'image/gif')
+        # Upload Binary and GIF
+        d_url = upload_asset('binary_filename', 'installers', project_data.get('binary_filename', 'app.apk'))
+        g_url = upload_asset('gif_filename', 'visuals', project_data.get('gif_filename', 'demo.gif'))
 
-        screenshot_urls = []
-        for shot in project_data.get('screenshots', []):
-            url = upload_asset(shot, 'screenshots', 'image/png')
-            if url: screenshot_urls.append(url)
+        # Process Screenshots using keys from request.files
+        s_urls = []
+        for shot_filename in project_data.get('screenshots', []):
+            if shot_filename in request.files:
+                url = upload_asset(shot_filename, 'screenshots', shot_filename)
+                if url: s_urls.append(url)
 
-        # Consolidate and Upsert
-        db_payload = {
-            "title": title,
-            "project_type": project_data.get('project_type', 'web'),
-            "description": project_data.get('description'),
-            "tech_stack": project_data.get('tech_stack'),
-            "architecture_tags": project_data.get('architecture_tags'),
-            "github_url": project_data.get('github_url'),
-            "live_url": project_data.get('live_url'),
-            "download_url": download_url,
-            "gif_url": gif_url,
-            "screenshot_urls": screenshot_urls
-        }
-
-        # Committing to Database
-        supabase.table("projects").upsert(db_payload, on_conflict="title").execute()
+        # Sync to DB
+        supabase.table("projects").upsert({
+            **project_data,
+            "download_url": d_url,
+            "gif_url": g_url,
+            "screenshot_urls": s_urls
+        }, on_conflict="title").execute()
 
         return jsonify({"status": "success", "message": "Pipeline complete"}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/', methods=['GET'])
-def index():
-    return jsonify({"message": "API is online"}), 200
-
-@app.route('/api/projects', methods=['GET'])
-def get_projects():
-    try:
-        # This matches the fetch call in your App.jsx
-        response = supabase.table("projects").select("*").execute()
-        return jsonify(response.data), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
