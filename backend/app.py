@@ -83,27 +83,28 @@ def sync_project_pipeline():
         def upload_asset(file_key, folder, filename):
             if file_key in request.files:
                 file_obj = request.files[file_key]
-                # Reset file pointer to the beginning to ensure it reads correctly
-                file_obj.seek(0)
+                file_obj.seek(0)  # Ensure we are at the start of the file
 
+                # Use secure_filename to create a valid path
                 path = f"{folder}/{secure_filename(title)}/{secure_filename(filename)}"
 
                 try:
-                    # 1. Try to upload
+                    # 1. Attempt Upload
                     supabase.storage.from_("portfolio-assets").upload(
                         path=path,
                         file=file_obj.read(),
                         file_options={"content-type": "application/octet-stream"}
                     )
+                    print(f"SUCCESS: Uploaded {path}")
                 except Exception as e:
-                    # 2. Check if it's a "Duplicate" error (Status 409)
+                    # 2. Check for Duplicate (409)
                     if '409' in str(e):
-                        print(f"File {filename} exists, skipping upload.")
+                        print(f"INFO: {filename} already exists. Skipping upload.")
                     else:
-                        print(f"PIPELINE ERROR: Upload failed for {path}: {e}")
+                        print(f"PIPELINE ERROR: Unexpected error for {path}: {e}")
                         return None
 
-                # 3. Always return the public URL (whether it was newly uploaded or already there)
+                # 3. Always fetch and return the URL
                 return supabase.storage.from_("portfolio-assets").get_public_url(path)
             return None
 
