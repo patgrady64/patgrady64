@@ -173,7 +173,7 @@ function App() {
                         </span>
                       ))}
                     </div>
-                  </div>
+                  </div> {/* FIX: This closing div was missing, wrapping the upper block */}
                   
                   {/* Media Preview & Call-to-Action Bar */}
                   <div className="mt-8 pt-5 border-t border-gray-800/60 flex items-center justify-between gap-4">

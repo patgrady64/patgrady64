@@ -52,7 +52,6 @@ def parse_project_csv(csv_text_content):
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
-# Safety check print statements to help us debug in the terminal
 print(f"--- DEBUG TELEMETRY ---")
 print(f"Supabase URL Loaded: {SUPABASE_URL}")
 print(f"Supabase Key Loaded: {'Successfully Found Key!' if SUPABASE_KEY else 'MISSING/EMPTY'}")
@@ -69,10 +68,7 @@ def home():
 @app.route('/api/projects', methods=['GET'])
 def get_projects():
     try:
-        # Fetch all columns for all projects from your live Supabase table
         response = supabase.table("projects").select("*").execute()
-
-        # response.data contains the list of row dictionaries returned by Supabase
         return jsonify(response.data), 200
     except Exception as e:
         return jsonify({"error": f"Failed to fetch live database records: {str(e)}"}), 500
@@ -115,10 +111,10 @@ def sync_project_pipeline():
             file_bytes = asset_file.read()
             bucket_path = f"installers/{secure_filename(title)}/{secure_filename(binary_filename)}"
 
-            # x-upsert option provided as string to align with underlying HTTP headers safely
+            # FIX: Use parameter name 'options', snake_case 'content_type', and string value "true" for upsert
             supabase.storage.from_("portfolio-assets").upload(
                 path=bucket_path, file=file_bytes,
-                file_options={"content-type": "application/octet-stream", "x-upsert": "true"}
+                options={"content_type": "application/octet-stream", "upsert": "true"}
             )
             download_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
 
@@ -128,9 +124,10 @@ def sync_project_pipeline():
             gif_bytes = gif_file.read()
             bucket_path = f"visuals/{secure_filename(title)}/{secure_filename(gif_filename)}"
 
+            # FIX: Use parameter name 'options', snake_case 'content_type', and string value "true" for upsert
             supabase.storage.from_("portfolio-assets").upload(
                 path=bucket_path, file=gif_bytes,
-                file_options={"content-type": "image/gif", "x-upsert": "true"}
+                options={"content_type": "image/gif", "upsert": "true"}
             )
             gif_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
 
@@ -141,9 +138,10 @@ def sync_project_pipeline():
                 shot_bytes = shot_file.read()
                 bucket_path = f"screenshots/{secure_filename(title)}/{secure_filename(shot_name)}"
 
+                # FIX: Use parameter name 'options', snake_case 'content_type', and string value "true" for upsert
                 supabase.storage.from_("portfolio-assets").upload(
                     path=bucket_path, file=shot_bytes,
-                    file_options={"content-type": "image/png", "x-upsert": "true"}
+                    options={"content_type": "image/png", "upsert": "true"}
                 )
                 public_url = supabase.storage.from_("portfolio-assets").get_public_url(bucket_path)
                 screenshot_urls.append(public_url)
@@ -174,7 +172,6 @@ def sync_project_pipeline():
     except Exception as e:
         return jsonify({"error": f"Internal pipeline execution error: {str(e)}"}), 500
 
-# 5. SERVER START (Keep at the absolute bottom)
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
