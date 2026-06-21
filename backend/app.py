@@ -17,9 +17,17 @@ CORS(app)
 
 # 2. INITIALIZE CLIENT
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
+
 print("SUPABASE_URL =", SUPABASE_URL)
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+try:
+    print("DEBUG: Testing Supabase connection...")
+    supabase.table("projects").select("title").limit(1).execute()
+    print("DEBUG: Supabase connection successful!")
+except Exception as e:
+    print(f"DEBUG: Supabase CONNECTION FAILED: {e}")
 
 
 # 3. HELPER FUNCTIONS
@@ -72,29 +80,31 @@ def sync_project_pipeline():
 
         title = secure_filename(project_data.get('title', 'project'))
 
-        def upload_asset(file_key, folder, content_type):
+        def upload_asset(file_key, folder, filename):
             if file_key in request.files:
                 file_obj = request.files[file_key]
-
-                # 1. Ensure we have a valid name to prevent path errors
-                clean_title = secure_filename(title) if 'title' in locals() else "project"
-                safe_filename = secure_filename(file_obj.filename)
-                path = f"{folder}/{clean_title}/{safe_filename}"
-
+                path = f"{folder}/{secure_filename(title)}/{secure_filename(filename)}"
                 try:
-                    # 2. Upload the file
+                    # Upload
                     supabase.storage.from_("portfolio-assets").upload(
                         path=path,
                         file=file_obj.read(),
-                        file_options={"contentType": content_type}
+                        file_options={"content-type": "application/octet-stream"}
                     )
                     return supabase.storage.from_("portfolio-assets").get_public_url(path)
                 except Exception as e:
-                    import traceback
-                    print(f"PIPELINE ERROR: Could not upload {path}")
-                    traceback.print_exc()
+                    print(f"PIPELINE ERROR: Upload failed for {path}: {e}")
                     return None
             return None
+
+        # UPDATE THIS BLOCK (Correcting the arguments)
+        d_url = upload_asset('binary_filename', 'installers', project_data.get('binary_filename'))
+        g_url = upload_asset('gif_filename', 'visuals', project_data.get('gif_filename'))
+
+        s_urls = []
+        for shot in project_data.get('screenshots', []):
+            url = upload_asset(shot, 'screenshots', shot)
+            if url: s_urls.append(url)
 
         # Upload Binary and GIF
         d_url = upload_asset(
