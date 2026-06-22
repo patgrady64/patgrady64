@@ -582,9 +582,9 @@ export default function AdminDashboard ({ projects, existingFiles }) {
                           GIF ↗
                         </a>
                       </td>
-                      ;
                       <td className='p-4'>
                         <div className='flex flex-col gap-1 text-xs'>
+                          {/* Use exact path format: folder/ProjectTitle/filename */}
                           <span>
                             {hasAsset(
                               `installers/${project.title}/${project.binary_filename}`
@@ -601,8 +601,13 @@ export default function AdminDashboard ({ projects, existingFiles }) {
                               : '❌'}{' '}
                             GIF
                           </span>
+                          {/* For screenshots, you likely need to check if the folder exists, 
+        but since you have multiple files, checking the folder existence is safer */}
                           <span>
-                            {hasAsset(`screenshots/${project.title}/...`)
+                            {/* This checks if the project's screenshot folder contains ANY files */}
+                            {existingFiles.some(f =>
+                              f.startsWith(`screenshots/${project.title}/`)
+                            )
                               ? '✅'
                               : '❌'}{' '}
                             Screenshots
