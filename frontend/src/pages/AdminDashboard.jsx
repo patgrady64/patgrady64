@@ -21,7 +21,15 @@ export default function AdminDashboard ({ projects, existingFiles }) {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
 
+  const [projects, setProjects] = useState(initialProjects || [])
+  const [existingFiles, setExistingFiles] = useState(initialFiles || [])
+
   const fileInputRef = React.useRef(null)
+
+  useEffect(() => {
+    setProjects(initialProjects)
+    setExistingFiles(initialFiles)
+  }, [initialProjects, initialFiles])
 
   // Check for an active session when the page loads
   useEffect(() => {
@@ -38,7 +46,7 @@ export default function AdminDashboard ({ projects, existingFiles }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+  const API_BASE = 'https://patgrady64.onrender.com'
 
   useEffect(() => {
     if (session) {
