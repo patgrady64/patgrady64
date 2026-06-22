@@ -202,10 +202,19 @@ def check_assets(project_title):
 @app.route('/api/admin/check-all-assets', methods=['GET'])
 def check_all_assets():
     try:
-        # This lists all files in the bucket; adjust if you have a massive amount of files
-        response = supabase.storage.from_("portfolio-assets").list(path="")
-        # Return a flat list of paths
-        return jsonify({"files": [f"{f['name']}" for f in response]}), 200
+        # Get everything
+        folders = ['installers', 'screenshots', 'visuals']
+        all_files = []
+        for folder in folders:
+            # List files in the subfolders
+            response = supabase.storage.from_("portfolio-assets").list(path=folder)
+            for item in response:
+                # If it's a folder, list contents
+                if 'id' in item and item['id'] is None: # It's a folder
+                     sub_response = supabase.storage.from_("portfolio-assets").list(path=f"{folder}/{item['name']}")
+                     for sub_item in sub_response:
+                         all_files.append(f"{folder}/{item['name']}/{sub_item['name']}")
+        return jsonify({"files": all_files}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
