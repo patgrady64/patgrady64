@@ -134,11 +134,11 @@ def sync_project_pipeline():
         d_url = None
         g_url = None
 
-        d_url = upload_asset(...)
+        d_url = upload_asset('binary_filename', 'installers', project_data.get('binary_filename', 'app.apk'), title)
         if d_url:
             pipeline_state["files_uploaded"].append(d_url)
 
-        g_url = upload_asset(...)
+        g_url = upload_asset('gif_filename', 'visuals', project_data.get('gif_filename', 'demo.gif'), title)
         if g_url:
             pipeline_state["files_uploaded"].append(g_url)
 
@@ -195,6 +195,17 @@ def check_assets(project_title):
                 found_files.extend([f"{folder}/{file['name']}" for file in response])
 
         return jsonify({"files": found_files}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/admin/check-all-assets', methods=['GET'])
+def check_all_assets():
+    try:
+        # This lists all files in the bucket; adjust if you have a massive amount of files
+        response = supabase.storage.from_("portfolio-assets").list(path="")
+        # Return a flat list of paths
+        return jsonify({"files": [f"{f['name']}" for f in response]}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

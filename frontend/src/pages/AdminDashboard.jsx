@@ -8,7 +8,9 @@ import {
   FileCode
 } from 'lucide-react'
 
-export default function AdminDashboard () {
+export default function AdminDashboard ({ projects, existingFiles }) {
+  const hasAsset = path => existingFiles.includes(path)
+
   const [session, setSession] = useState(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -36,6 +38,22 @@ export default function AdminDashboard () {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+
+  useEffect(() => {
+    if (session) {
+      // Fetch projects
+      fetch(`${API_BASE}/api/projects`)
+        .then(res => res.json())
+        .then(data => setProjects(Array.isArray(data) ? data : []))
+
+      // Fetch ALL assets at once (requires creating this endpoint in Flask)
+      fetch(`${API_BASE}/api/admin/check-all-assets`)
+        .then(res => res.json())
+        .then(data => setExistingFiles(data.files || []))
+    }
+  }, [session])
 
   const handleLogin = async e => {
     e.preventDefault()
