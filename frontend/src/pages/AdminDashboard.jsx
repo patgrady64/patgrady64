@@ -42,15 +42,12 @@ export default function AdminDashboard ({ projects, existingFiles }) {
 
   useEffect(() => {
     if (session) {
-      // Fetch projects
-      fetch(`${API_BASE}/api/projects`)
-        .then(res => res.json())
-        .then(data => setProjects(Array.isArray(data) ? data : []))
-
-      // Fetch ALL assets at once (requires creating this endpoint in Flask)
       fetch(`${API_BASE}/api/admin/check-all-assets`)
         .then(res => res.json())
-        .then(data => setExistingFiles(data.files || []))
+        .then(data => {
+          console.log('Files from Supabase:', data.files) // <--- ADD THIS
+          setExistingFiles(data.files || [])
+        })
     }
   }, [session])
 
