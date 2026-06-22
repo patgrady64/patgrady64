@@ -17,7 +17,6 @@ export default function AdminDashboard ({ projects, existingFiles }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const [projects, setProjects] = useState([])
   const [fetchingProjects, setFetchingProjects] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
