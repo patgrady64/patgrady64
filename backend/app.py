@@ -30,7 +30,7 @@ def get_supabase_columns():
 
     except Exception as e:
         print("Schema fetch failed:", e)
-        return set()ch failed:", e)
+        return set()
         return set()
 
 # 1. SETUP
@@ -176,6 +176,27 @@ def sync_project_pipeline():
                     supabase.storage.from_("portfolio-assets").remove([path])
                 except Exception as cleanup_error:
                     print("Rollback failed for:", url, cleanup_error)
+
+
+@app.route('/api/admin/check-assets/<project_title>', methods=['GET'])
+def check_assets(project_title):
+    try:
+        # Construct paths for the folders where we store these assets
+        folders = ['installers', 'visuals', 'screenshots']
+        found_files = []
+
+        for folder in folders:
+            # List files in the project-specific subfolder
+            path = f"{folder}/{secure_filename(project_title)}"
+            response = supabase.storage.from_("portfolio-assets").list(path=path)
+
+            # Extract filenames from the response
+            if response:
+                found_files.extend([f"{folder}/{file['name']}" for file in response])
+
+        return jsonify({"files": found_files}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':

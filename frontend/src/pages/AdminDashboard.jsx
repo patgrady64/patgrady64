@@ -565,6 +565,33 @@ export default function AdminDashboard () {
                           GIF ↗
                         </a>
                       </td>
+                      ;
+                      <td className='p-4'>
+                        <div className='flex flex-col gap-1 text-xs'>
+                          <span>
+                            {hasAsset(
+                              `installers/${project.title}/${project.binary_filename}`
+                            )
+                              ? '✅'
+                              : '❌'}{' '}
+                            Binary
+                          </span>
+                          <span>
+                            {hasAsset(
+                              `visuals/${project.title}/${project.gif_filename}`
+                            )
+                              ? '✅'
+                              : '❌'}{' '}
+                            GIF
+                          </span>
+                          <span>
+                            {hasAsset(`screenshots/${project.title}/...`)
+                              ? '✅'
+                              : '❌'}{' '}
+                            Screenshots
+                          </span>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

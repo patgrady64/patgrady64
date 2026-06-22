@@ -17,6 +17,28 @@ function App () {
   // 1. LIGHTWEIGHT STATE ROUTER
   const [currentPath, setCurrentPath] = useState(window.location.hash || '#/')
 
+const [projects, setProjects] = useState([])
+const [existingFiles, setExistingFiles] = useState([])
+
+useEffect(() => {
+  // Fetch projects
+  fetch('/api/projects')
+    .then(res => res.json())
+    .then(setProjects)
+
+  // Note: For simplicity, you can call this for each project or
+  // write a single route that returns all storage files at once.
+  // Here we assume you fetch all statuses:
+  fetch('/api/admin/check-all-assets')
+    .then(res => res.json())
+    .then(data => setExistingFiles(data.files))
+}, [])
+
+// Helper to check if a file exists in the storage list
+const hasAsset = path => existingFiles.includes(path)
+
+
+
   // Pull your Render API URL from environment variables
   const API_URL = import.meta.env.VITE_API_URL || ''
 
