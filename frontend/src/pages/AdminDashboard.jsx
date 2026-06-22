@@ -8,7 +8,7 @@ import {
   FileCode
 } from 'lucide-react'
 
-export default function AdminDashboard ({ projects, existingFiles }) {
+export default function AdminDashboard () {
   const hasAsset = path => existingFiles.includes(path)
 
   const [session, setSession] = useState(null)

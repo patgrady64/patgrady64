@@ -66,7 +66,7 @@ function App () {
   // 2. ROUTE CONDITIONAL RENDERING
   if (currentPath === '#/admin') {
     return(
-    <AdminDashboard projects={projects} existingFiles={existingFiles} />
+    <AdminDashboard/>
   )}
 
   return (
