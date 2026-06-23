@@ -21,17 +21,82 @@ export default function AdminDashboard () {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
 
-  const [projects, setProjects] = useState(initialProjects || [])
-  const [existingFiles, setExistingFiles] = useState(initialFiles || [])
+  const [projects, setProjects] = useState([])
+  const [expandedProjects, setExpandedProjects] = useState({})
+  const [existingFiles, setExistingFiles] = useState([])
 
   const fileInputRef = React.useRef(null)
 
-  useEffect(() => {
-    setProjects(initialProjects)
-    setExistingFiles(initialFiles)
-  }, [initialProjects, initialFiles])
+  const groupedFiles = existingFiles.reduce((acc, path) => {
+    const parts = path.split('/')
 
-  // Check for an active session when the page loads
+    if (parts.length < 3) return acc
+
+    const folder = parts[0]
+    const project = parts[1]
+    const name = parts.slice(2).join('/')
+
+    const fetchData = async () => {
+      if (!session) return
+
+      try {
+        // Fetch Projects
+        const projRes = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/projects`
+        )
+        const projData = await projRes.json()
+        setProjects(projData)
+
+        // Fetch Assets
+        const assetRes = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`
+        )
+        const assetData = await assetRes.json()
+        setExistingFiles(Array.isArray(assetData.files) ? assetData.files : [])
+      } catch (err) {
+        console.error('Data fetch failed:', err)
+      }
+    }
+
+    useEffect(() => {
+      fetchData()
+    }, [session])
+
+    // 2. Properly derived groupedFiles
+    const groupedFiles = React.useMemo(() => {
+      return existingFiles.reduce((acc, path) => {
+        const parts = path.split('/')
+        if (parts.length < 3) return acc
+        const folder = parts[0]
+        const project = parts[1]
+        const name = parts.slice(2).join('/') /*  */
+        if (!acc[project]) acc[project] = []
+        acc[project].push({ folder, name })
+        return acc
+      }, {})
+    }, [existingFiles])
+
+    const hasAsset = path => existingFiles.includes(path)
+
+    if (!acc[project]) {
+      acc[project] = []
+    }
+
+    acc[project].push({
+      folder,
+      name
+    })
+
+    return acc
+  }, {})
+
+  const toggleProject = projectName => {
+    setExpandedProjects(prev => ({
+      ...prev,
+      [projectName]: !prev[projectName]
+    }))
+  }
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
@@ -78,28 +143,34 @@ export default function AdminDashboard () {
   }
 
   // Fetch projects from live production database API
-  const fetchProjects = () => {
-    if (session) {
-      setFetchingProjects(true)
-      fetch(
-        `${
-          import.meta.env.VITE_API_URL || 'http://localhost:5000'
-        }/api/projects`
-      )
-        .then(res => res.json())
-        .then(data => {
-          setProjects(Array.isArray(data) ? data : [])
-          setFetchingProjects(false)
-        })
-        .catch(err => {
-          console.error('Error fetching projects:', err)
-          setFetchingProjects(false)
-        })
-    }
-  }
+  useEffect(() => {
+    if (!session) return
+
+    fetch(`${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`)
+      .then(res => res.json())
+      .then(data => {
+        setExistingFiles(Array.isArray(data) ? data : [])
+      })
+      .catch(err => {
+        console.error('Asset check failed:', err)
+      })
+  }, [session])
 
   useEffect(() => {
     fetchProjects()
+  }, [session])
+
+  useEffect(() => {
+    if (!session) return
+
+    fetch(`${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`)
+      .then(res => res.json())
+      .then(data => {
+        setExistingFiles(Array.isArray(data) ? data : [])
+      })
+      .catch(err => {
+        console.error('Asset fetch failed:', err)
+      })
   }, [session])
 
   // --- DRAG AND DROP PIPELINE INTERCEPT HANDLERS ---
@@ -169,12 +240,10 @@ export default function AdminDashboard () {
         )
       }
 
-      // Fire multi-part form package directly to Flask endpoint pipeline
       const result = await streamPayloadToPipeline(formData)
-      console.log('Ingestion Synchronized Successfully:', result)
-      fetchProjects() // Reload table data seamlessly
+      fetchProjects()
     } catch (err) {
-      console.error('Dropzone Error:', err)
+      console.error('Drop Upload Error:', err)
       setError(err.message)
     } finally {
       setUploading(false)
@@ -376,6 +445,7 @@ export default function AdminDashboard () {
     )
   }
 
+  // --- 2. PROTECTED ADMIN PANEL ---
   // --- 2. PROTECTED ADMIN PANEL ---
   return (
     <div className='min-h-screen bg-gray-900 text-gray-100 font-sans p-6 sm:p-12'>
@@ -587,9 +657,9 @@ export default function AdminDashboard () {
                           GIF ↗
                         </a>
                       </td>
+                      ;
                       <td className='p-4'>
                         <div className='flex flex-col gap-1 text-xs'>
-                          {/* Use exact path format: folder/ProjectTitle/filename */}
                           <span>
                             {hasAsset(
                               `installers/${project.title}/${project.binary_filename}`
@@ -606,13 +676,8 @@ export default function AdminDashboard () {
                               : '❌'}{' '}
                             GIF
                           </span>
-                          {/* For screenshots, you likely need to check if the folder exists, 
-        but since you have multiple files, checking the folder existence is safer */}
                           <span>
-                            {/* This checks if the project's screenshot folder contains ANY files */}
-                            {existingFiles.some(f =>
-                              f.startsWith(`screenshots/${project.title}/`)
-                            )
+                            {hasAsset(`screenshots/${project.title}/...`)
                               ? '✅'
                               : '❌'}{' '}
                             Screenshots

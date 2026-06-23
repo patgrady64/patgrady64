@@ -199,23 +199,44 @@ def check_assets(project_title):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/admin/check-all-assets', methods=['GET'])
+@app.route('/api/admin/check-all-assets')
 def check_all_assets():
     try:
-        # Get everything
-        folders = ['installers', 'screenshots', 'visuals']
-        all_files = []
-        for folder in folders:
-            # List files in the subfolders
-            response = supabase.storage.from_("portfolio-assets").list(path=folder)
-            for item in response:
-                # If it's a folder, list contents
-                if 'id' in item and item['id'] is None: # It's a folder
-                     sub_response = supabase.storage.from_("portfolio-assets").list(path=f"{folder}/{item['name']}")
-                     for sub_item in sub_response:
-                         all_files.append(f"{folder}/{item['name']}/{sub_item['name']}")
-        return jsonify({"files": all_files}), 200
+        files = []
+
+        folders = [
+            "installers",
+            "visuals",
+            "screenshots"
+        ]
+
+        bucket = supabase.storage.from_("portfolio-assets")
+
+        for root_folder in folders:
+
+            # Get project folders (PicRoulette, Beacon, etc.)
+            project_folders = bucket.list(root_folder)
+
+            for project in project_folders:
+                project_name = project["name"]
+
+                # Go inside:
+                # installers/PicRoulette
+                path = f"{root_folder}/{project_name}"
+
+                inner_files = bucket.list(path)
+
+                for item in inner_files:
+                    files.append({
+                        "folder": root_folder,
+                        "project": project_name,
+                        "name": item["name"]
+                    })
+
+        return jsonify(files)
+
     except Exception as e:
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
