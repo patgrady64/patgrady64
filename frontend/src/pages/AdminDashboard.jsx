@@ -644,6 +644,7 @@ export default function AdminDashboard () {
                       <td className='p-4'>
                         <div className='flex flex-col gap-1 text-xs'>
                           <span>
+                            {/* Ensure the folder name matches exactly what app.py uses: 'installers' */}
                             {hasAsset(
                               'installers',
                               project.title,
@@ -654,6 +655,7 @@ export default function AdminDashboard () {
                             Binary
                           </span>
                           <span>
+                            {/* Ensure the folder name matches exactly what app.py uses: 'visuals' */}
                             {hasAsset(
                               'visuals',
                               project.title,
