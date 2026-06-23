@@ -54,57 +54,57 @@ const hasAsset = (folder, project, name) => {
     const project = parts[1]
     const name = parts.slice(2).join('/')
 
-    const fetchData = async () => {
-      if (!session) return
+    // const fetchData = async () => {
+    //   if (!session) return
 
-      try {
-        // Fetch Projects
-        const projRes = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/projects`
-        )
-        const projData = await projRes.json()
-        setProjects(projData)
+    //   try {
+    //     // Fetch Projects
+    //     const projRes = await fetch(
+    //       `${import.meta.env.VITE_API_URL}/api/projects`
+    //     )
+    //     const projData = await projRes.json()
+    //     setProjects(projData)
 
-        // Fetch Assets
-        const assetRes = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`
-        )
-        const assetData = await assetRes.json()
-        setExistingFiles(Array.isArray(assetData.files) ? assetData.files : [])
-      } catch (err) {
-        console.error('Data fetch failed:', err)
-      }
-    }
+    //     // Fetch Assets
+    //     const assetRes = await fetch(
+    //       `${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`
+    //     )
+    //     const assetData = await assetRes.json()
+    //     setExistingFiles(Array.isArray(assetData.files) ? assetData.files : [])
+    //   } catch (err) {
+    //     console.error('Data fetch failed:', err)
+    //   }
+    // }
 
     useEffect(() => {
       fetchData()
     }, [session])
 
-    // 2. Properly derived groupedFiles
-  //   const groupedFiles = React.useMemo(() => {
-  //     return existingFiles.reduce((acc, path) => {
-  //       const parts = path.split('/')
-  //       if (parts.length < 3) return acc
-  //       const folder = parts[0]
-  //       const project = parts[1]
-  //       const name = parts.slice(2).join('/') /*  */
-  //       if (!acc[project]) acc[project] = []
-  //       acc[project].push({ folder, name })
-  //       return acc
-  //     }, {})
-  //   }, [existingFiles])
+    //2. Properly derived groupedFiles
+    const groupedFiles = React.useMemo(() => {
+      return existingFiles.reduce((acc, path) => {
+        const parts = path.split('/')
+        if (parts.length < 3) return acc
+        const folder = parts[0]
+        const project = parts[1]
+        const name = parts.slice(2).join('/') /*  */
+        if (!acc[project]) acc[project] = []
+        acc[project].push({ folder, name })
+        return acc
+      }, {})
+    }, [existingFiles])
 
-  //   if (!acc[project]) {
-  //     acc[project] = []
-  //   }
+    if (!acc[project]) {
+      acc[project] = []
+    }
 
-  //   acc[project].push({
-  //     folder,
-  //     name
-  //   })
+    acc[project].push({
+      folder,
+      name
+    })
 
-  //   return acc
-  // }, {})
+    return acc
+  }, {})
 
   const toggleProject = projectName => {
     setExpandedProjects(prev => ({
@@ -716,4 +716,4 @@ const hasAsset = (folder, project, name) => {
       </div>
     </div>
   )
-  })}
+  }
