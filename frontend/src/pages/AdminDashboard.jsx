@@ -58,6 +58,19 @@ export default function AdminDashboard () {
       }
     }
 
+    const fetchProjects = async () => {
+      setFetchingProjects(true)
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/projects`)
+        const data = await res.json()
+        setProjects(data)
+      } catch (err) {
+        console.error('Failed to fetch projects:', err)
+      } finally {
+        setFetchingProjects(false)
+      }
+    }
+
     useEffect(() => {
       fetchData()
     }, [session])
