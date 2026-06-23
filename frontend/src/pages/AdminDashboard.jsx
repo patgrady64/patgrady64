@@ -9,7 +9,12 @@ import {
 } from 'lucide-react'
 
 export default function AdminDashboard () {
-  const hasAsset = path => existingFiles.includes(path)
+const hasAsset = (folder, project, name) => {
+  return existingFiles.some(
+    f => f.folder === folder && f.project === project && f.name === name
+  )
+}
+
 
   const [session, setSession] = useState(null)
   const [email, setEmail] = useState('')
@@ -76,32 +81,30 @@ export default function AdminDashboard () {
     }, [session])
 
     // 2. Properly derived groupedFiles
-    const groupedFiles = React.useMemo(() => {
-      return existingFiles.reduce((acc, path) => {
-        const parts = path.split('/')
-        if (parts.length < 3) return acc
-        const folder = parts[0]
-        const project = parts[1]
-        const name = parts.slice(2).join('/') /*  */
-        if (!acc[project]) acc[project] = []
-        acc[project].push({ folder, name })
-        return acc
-      }, {})
-    }, [existingFiles])
+  //   const groupedFiles = React.useMemo(() => {
+  //     return existingFiles.reduce((acc, path) => {
+  //       const parts = path.split('/')
+  //       if (parts.length < 3) return acc
+  //       const folder = parts[0]
+  //       const project = parts[1]
+  //       const name = parts.slice(2).join('/') /*  */
+  //       if (!acc[project]) acc[project] = []
+  //       acc[project].push({ folder, name })
+  //       return acc
+  //     }, {})
+  //   }, [existingFiles])
 
-    const hasAsset = path => existingFiles.includes(path)
+  //   if (!acc[project]) {
+  //     acc[project] = []
+  //   }
 
-    if (!acc[project]) {
-      acc[project] = []
-    }
+  //   acc[project].push({
+  //     folder,
+  //     name
+  //   })
 
-    acc[project].push({
-      folder,
-      name
-    })
-
-    return acc
-  }, {})
+  //   return acc
+  // }, {})
 
   const toggleProject = projectName => {
     setExpandedProjects(prev => ({
@@ -128,12 +131,18 @@ export default function AdminDashboard () {
 
   useEffect(() => {
     if (session) {
-      fetch(`${API_BASE}/api/admin/check-all-assets`)
-        .then(res => res.json())
-        .then(data => {
-          console.log('Files from Supabase:', data.files) // <--- ADD THIS
-          setExistingFiles(data.files || [])
+      const url = `${API_BASE}/api/admin/check-all-assets`
+      console.log('Fetching from:', url) // Verify this matches your backend
+      fetch(url)
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
+          return res.json()
         })
+        .then(data => {
+          console.log('Files received:', data)
+          setExistingFiles(data || [])
+        })
+        .catch(err => console.error('Fetch failed:', err))
     }
   }, [session])
 

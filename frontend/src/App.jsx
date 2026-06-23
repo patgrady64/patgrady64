@@ -32,9 +32,6 @@ function App () {
       .then(data => setExistingFiles(data.files))
   }, [])
 
-  // Helper to check if a file exists in the storage list
-  const hasAsset = path => existingFiles.includes(path)
-
   // Pull your Render API URL from environment variables
   const API_URL = import.meta.env.VITE_API_URL || ''
 
