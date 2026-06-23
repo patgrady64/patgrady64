@@ -27,6 +27,19 @@ export default function AdminDashboard () {
 
   const fileInputRef = React.useRef(null)
 
+  const fetchProjects = async () => {
+    setFetchingProjects(true)
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/projects`)
+      const data = await res.json()
+      setProjects(data)
+    } catch (err) {
+      console.error('Failed to fetch projects:', err)
+    } finally {
+      setFetchingProjects(false)
+    }
+  }
+
   const groupedFiles = existingFiles.reduce((acc, path) => {
     const parts = path.split('/')
 
@@ -55,19 +68,6 @@ export default function AdminDashboard () {
         setExistingFiles(Array.isArray(assetData.files) ? assetData.files : [])
       } catch (err) {
         console.error('Data fetch failed:', err)
-      }
-    }
-
-    const fetchProjects = async () => {
-      setFetchingProjects(true)
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/projects`)
-        const data = await res.json()
-        setProjects(data)
-      } catch (err) {
-        console.error('Failed to fetch projects:', err)
-      } finally {
-        setFetchingProjects(false)
       }
     }
 
