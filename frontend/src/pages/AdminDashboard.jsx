@@ -50,66 +50,27 @@ export default function AdminDashboard () {
     ).length
   }
 
-  const groupedFiles = existingFiles.reduce((acc, path) => {
-    const parts = path.split('/')
-
-    if (parts.length < 3) return acc
-
-    const folder = parts[0]
-    const project = parts[1]
-    const name = parts.slice(2).join('/')
-
-    // const fetchData = async () => {
-    //   if (!session) return
-
-    //   try {
-    //     // Fetch Projects
-    //     const projRes = await fetch(
-    //       `${import.meta.env.VITE_API_URL}/api/projects`
-    //     )
-    //     const projData = await projRes.json()
-    //     setProjects(projData)
-
-    //     // Fetch Assets
-    //     const assetRes = await fetch(
-    //       `${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`
-    //     )
-    //     const assetData = await assetRes.json()
-    //     setExistingFiles(Array.isArray(assetData.files) ? assetData.files : [])
-    //   } catch (err) {
-    //     console.error('Data fetch failed:', err)
-    //   }
-    // }
-
     useEffect(() => {
       fetchData()
     }, [session])
 
-    //2. Properly derived groupedFiles
-    //   const groupedFiles = React.useMemo(() => {
-    //     return existingFiles.reduce((acc, path) => {
-    //       const parts = path.split('/')
-    //       if (parts.length < 3) return acc
-    //       const folder = parts[0]
-    //       const project = parts[1]
-    //       const name = parts.slice(2).join('/') /*  */
-    //       if (!acc[project]) acc[project] = []
-    //       acc[project].push({ folder, name })
-    //       return acc
-    //     }, {})
-    //   }, [existingFiles])
+const groupedFiles = React.useMemo(() => {
+  // 1. Provide {} as the initial value to prevent "empty array" errors
+  return existingFiles.reduce((acc, file) => {
+    // 2. Safely access the properties returned by your Flask backend (app.py)
+    const { project, folder, name } = file
 
-    //   if (!acc[project]) {
-    //     acc[project] = []
-    //   }
+    if (!project) return acc
 
-    //   acc[project].push({
-    //     folder,
-    //     name
-    //   })
+    if (!acc[project]) {
+      acc[project] = []
+    }
 
-    //   return acc
-    // }, {})
+    acc[project].push({ folder, name })
+    return acc
+  }, {}) // <--- This empty object is mandatory
+}, [existingFiles])
+
 
     const toggleProject = projectName => {
       setExpandedProjects(prev => ({
@@ -728,5 +689,4 @@ export default function AdminDashboard () {
         </div>
       </div>
     )
-  })
-}
+  }
