@@ -10,9 +10,17 @@ import {
 
 export default function AdminDashboard () {
   const hasAsset = (folder, project, name) => {
-    return existingFiles.some(
-      f => f.folder === folder && f.project === project && f.name === name
-    )
+    const found = existingFiles.some(f => {
+      const isMatch =
+        f.folder === folder && f.project === project && f.name === name
+      if (!isMatch && f.project === project && f.folder === folder) {
+        console.log(
+          `Mismatch! Expected: "${name}", Found in storage: "${f.name}"`
+        )
+      }
+      return isMatch
+    })
+    return found
   }
 
   const [session, setSession] = useState(null)
@@ -45,9 +53,11 @@ export default function AdminDashboard () {
   }
 
   const getScreenshotCount = projectTitle => {
-    return existingFiles.filter(
+    const files = existingFiles.filter(
       f => f.folder === 'screenshots' && f.project === projectTitle
-    ).length
+    )
+    console.log(`Found ${files.length} screenshots for ${projectTitle}:`, files)
+    return files.length
   }
 
   const groupedFiles = React.useMemo(() => {
@@ -644,7 +654,6 @@ export default function AdminDashboard () {
                       <td className='p-4'>
                         <div className='flex flex-col gap-1 text-xs'>
                           <span>
-                            {/* Ensure the folder name matches exactly what app.py uses: 'installers' */}
                             {hasAsset(
                               'installers',
                               project.title,
@@ -655,7 +664,6 @@ export default function AdminDashboard () {
                             Binary
                           </span>
                           <span>
-                            {/* Ensure the folder name matches exactly what app.py uses: 'visuals' */}
                             {hasAsset(
                               'visuals',
                               project.title,

@@ -119,63 +119,61 @@ def sync_project_pipeline():
         if 'info_csv' not in request.files:
             return jsonify({"error": "Missing info.csv"}), 400
 
+        # 1. Parse CSV
         project_data = parse_project_csv(request.files['info_csv'].read().decode('utf-8'))
 
-        # REMOVE unsafe DB fields FIRST
+        # 2. Extract and preserve filenames BEFORE cleaning
+        binary_filename = project_data.get("binary_filename")
+        gif_filename = project_data.get("gif_filename")
         screenshots = project_data.get("screenshots", [])
-        project_data.pop("screenshots", None)
-        project_data.pop("binary_filename", None)
-        project_data.pop("gif_filename", None)
+
+        # 3. Clean the project data for Supabase
+        project_data.pop("screenshots", None)  # Don't need this in the DB row
         clean_project_data = sanitize_for_supabase(project_data)
 
         title = project_data.get('title', 'project')
 
-        # Upload Assets
-        d_url = None
-        g_url = None
-
-        d_url = upload_asset('binary_filename', 'installers', project_data.get('binary_filename', 'app.apk'), title)
+        # 4. Upload Assets
+        d_url = upload_asset('binary_filename', 'installers', binary_filename or 'app.apk', title)
         if d_url:
             pipeline_state["files_uploaded"].append(d_url)
 
-        g_url = upload_asset('gif_filename', 'visuals', project_data.get('gif_filename', 'demo.gif'), title)
+        g_url = upload_asset('gif_filename', 'visuals', gif_filename or 'demo.gif', title)
         if g_url:
             pipeline_state["files_uploaded"].append(g_url)
 
         s_urls = []
-
         for shot in screenshots:
-            if not shot:
-                continue
-
-            if shot in request.files:
+            if shot and shot in request.files:
                 url = upload_asset(shot, 'screenshots', shot, title)
                 if url:
                     pipeline_state["files_uploaded"].append(url)
                     s_urls.append(url)
 
-        # Sync to DB
+        # 5. Sync to DB - Include the filenames here!
         supabase.table("projects").upsert({
             **clean_project_data,
+            "binary_filename": binary_filename,  # Added
+            "gif_filename": gif_filename,  # Added
             "download_url": d_url or "",
             "gif_url": g_url or "",
             "screenshot_urls": s_urls
         }, on_conflict="title").execute()
+
         pipeline_state["db_written"] = True
-
         return jsonify({"status": "success"}), 200
+
     except Exception as e:
-        print("PIPELINE FAILED — initiating rollback")
-
+        traceback.print_exc()
+        # Rollback logic remains the same...
         if not pipeline_state["db_written"]:
-            print("DB write failed — cleaning up uploaded files")
-
             for url in pipeline_state["files_uploaded"]:
                 try:
                     path = url.split("/storage/v1/object/public/portfolio-assets/")[-1]
                     supabase.storage.from_("portfolio-assets").remove([path])
-                except Exception as cleanup_error:
-                    print("Rollback failed for:", url, cleanup_error)
+                except Exception:
+                    pass
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/admin/check-assets/<project_title>', methods=['GET'])
