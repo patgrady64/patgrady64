@@ -261,10 +261,13 @@ export default function AdminDashboard () {
 
         if (baseName.toLowerCase() === 'info.csv') {
           formData.append('info_csv', file)
-          hasInfoCsv = true
+        } else if (baseName === binary_filename_from_csv) {
+          // You need to know these names
+          formData.append('binary_filename', file)
+        } else if (baseName === gif_filename_from_csv) {
+          formData.append('gif_filename', file)
         } else {
-          // Use clean baseName as the parameter key for backend streaming matching
-          formData.append(baseName, file)
+          formData.append(baseName, file) // Screenshots or other files
         }
       }
 

@@ -9,6 +9,7 @@ import {
 } from '@fortawesome/free-brands-svg-icons'
 
 import AdminDashboard from './pages/AdminDashboard'
+import ProjectGallery from './pages/ProjectGallery'
 
 function App () {
   const [projects, setProjects] = useState([])
@@ -62,9 +63,8 @@ function App () {
 
   // 2. ROUTE CONDITIONAL RENDERING
   if (currentPath === '#/admin') {
-    return(
-    <AdminDashboard/>
-  )}
+    return <AdminDashboard />
+  }
 
   return (
     <div className='min-h-screen bg-gray-900 text-gray-100 font-sans'>
@@ -191,6 +191,7 @@ function App () {
       {/* Main Content Layout Container */}
       <main className='max-w-6xl mx-auto px-6 py-16 space-y-20'>
         {/* SECTION 1: SOFTWARE PORTFOLIO */}
+
         <section>
           <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-10 border-b border-gray-800 pb-4'>
             <div>
@@ -198,101 +199,10 @@ function App () {
                 <Code className='text-emerald-400 stroke-[2.5]' size={22} />{' '}
                 Production Software Projects
               </h2>
-              <p className='text-sm text-gray-500 mt-1'>
-                Dynamic applications synced directly via Supabase & Flask API
-                architecture
-              </p>
-            </div>
-            <div className='text-xs text-gray-400 font-mono bg-gray-950 px-3 py-1.5 rounded-lg border border-gray-800 self-start sm:self-auto'>
-              Status: Connected
             </div>
           </div>
 
-          {loading ? (
-            <div className='flex flex-col items-center justify-center py-20 bg-gray-950/20 border border-gray-800/60 rounded-2xl border-dashed'>
-              <div className='w-8 h-8 border-4 border-emerald-500/20 border-t-emerald-400 rounded-full animate-spin'></div>
-              <p className='text-sm text-gray-500 mt-4 font-mono'>
-                Querying cloud environment payload tables...
-              </p>
-            </div>
-          ) : (
-            <div className='grid md:grid-cols-2 gap-8'>
-              {projects.map(project => (
-                <div
-                  key={project.id}
-                  className='group relative rounded-3xl border border-gray-800/60 bg-gradient-to-b from-gray-950 via-gray-900/80 to-gray-950 shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-emerald-500/10 overflow-hidden flex flex-col justify-between p-6'
-                >
-                  {/* Subtle hover background accent glow */}
-                  <div className='absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none'></div>
-                  <div>
-                    <div className='flex items-start justify-between gap-4'>
-                      <h3 className='text-2xl font-bold text-white tracking-tight group-hover:text-emerald-300 transition-colors duration-200'>
-                        {project.title}
-                      </h3>
-                      <span className='text-[10px] font-mono tracking-wider text-gray-500 bg-gray-900 px-2 py-0.5 rounded border border-gray-800 uppercase'>
-                        Active Build
-                      </span>
-                    </div>
-
-                    <p className='text-sm text-gray-300 mt-3 leading-relaxed max-w-prose'>
-                      {project.description}
-                    </p>
-
-                    {/* Tech Stack Badges */}
-                    <div className='flex flex-wrap gap-2 mt-5'>
-                      {(project.tech_stack || []).map((tech, idx) => (
-                        <span
-                          key={idx}
-                          className='font-mono text-[11px] font-medium text-emerald-400 bg-emerald-500/5 px-2.5 py-1 rounded-md border border-emerald-500/10 shadow-sm'
-                        >
-                          {tech}
-                        </span>
-                      ))}
-                    </div>
-                  </div>{' '}
-                  {/* FIX: This closing div was missing, wrapping the upper block */}
-                  {/* Media Preview & Call-to-Action Bar */}
-                  <div className='mt-8 pt-5 border-t border-gray-800/60 flex items-center justify-between gap-4'>
-                    {project.gif_url ? (
-                      <div className='relative w-20 h-20 rounded-2xl overflow-hidden border border-gray-800 group-hover:border-emerald-500/30 transition'>
-                        <img
-                          src={project.gif_url}
-                          alt='App Walkthrough Preview'
-                          className='w-full h-full object-cover group-hover:scale-110 transition-transform duration-300'
-                        />
-                      </div>
-                    ) : (
-                      <div className='w-14 h-14 rounded-xl bg-gray-950 border border-gray-800/80 flex flex-col items-center justify-center text-[10px] font-mono text-gray-600 flex-shrink-0 select-none'>
-                        <span>NO</span>
-                        <span>MOCK</span>
-                        <span>MOCK</span>
-                      </div>
-                    )}
-
-                    <div className='flex items-center gap-2.5'>
-                      <a
-                        href={project.live_url || '#'}
-                        target='_blank'
-                        rel='noreferrer'
-                        className='flex items-center gap-1.5 font-mono text-xs text-gray-400 hover:text-white bg-gray-950 hover:bg-gray-900 border border-gray-800 hover:border-gray-700 px-3 py-2 rounded-xl transition-all duration-200'
-                      >
-                        Code{' '}
-                        <ExternalLink size={13} className='text-gray-500' />
-                      </a>
-                      {project.download_url && (
-                        <a
-                          href={project.download_url}
-                          className='px-3 py-2 text-xs rounded-xl border border-gray-700 text-gray-300 hover:text-white hover:border-gray-500 hover:bg-white/5 transition'
-                        >
-                          <Download size={13} /> Download Build
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {loading ? <p>Loading...</p> : <ProjectGallery projects={projects} />}
         </section>
 
         {/* SECTION 2: STREAMING & CONTENT HUB */}

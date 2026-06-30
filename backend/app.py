@@ -25,7 +25,8 @@ def get_supabase_columns():
             "live_url",
             "download_url",
             "gif_url",
-            "screenshot_urls"
+            "screenshot_urls",
+            "dev_notes"
         }
 
     except Exception as e:
@@ -61,6 +62,8 @@ def parse_project_csv(csv_text_content):
 
 
 def upload_asset(file_key, folder, filename, project_title):
+    print(f"DEBUG: Checking for file_key: '{file_key}' in request.files")
+    print(f"DEBUG: All keys in request.files: {list(request.files.keys())}")
     if file_key in request.files:
         file_obj = request.files[file_key]
         file_obj.seek(0)
@@ -153,8 +156,9 @@ def sync_project_pipeline():
         # 5. Sync to DB - Include the filenames here!
         supabase.table("projects").upsert({
             **clean_project_data,
-            "binary_filename": binary_filename,  # Added
-            "gif_filename": gif_filename,  # Added
+            "binary_filename": binary_filename,
+            "gif_filename": gif_filename,
+            "dev_notes": project_data.get('dev_notes'),
             "download_url": d_url or "",
             "gif_url": g_url or "",
             "screenshot_urls": s_urls
