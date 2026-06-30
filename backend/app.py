@@ -62,13 +62,15 @@ def parse_project_csv(csv_text_content):
 
 
 def upload_asset(file_key, folder, filename, project_title):
-    print(f"DEBUG: Checking for file_key: '{file_key}' in request.files")
-    print(f"DEBUG: All keys in request.files: {list(request.files.keys())}")
-    if file_key in request.files:
-        file_obj = request.files[file_key]
+    # Check if the specific generic key exists, OR if the actual filename exists as a key
+    actual_key = file_key if file_key in request.files else filename
+
+    print(f"DEBUG: Checking for file_key: '{file_key}' or filename: '{filename}'")
+
+    if actual_key in request.files:
+        file_obj = request.files[actual_key]
         file_obj.seek(0)
 
-        # Use the passed project_title here
         path = f"{folder}/{secure_filename(project_title)}/{secure_filename(filename)}"
 
         try:
@@ -85,6 +87,8 @@ def upload_asset(file_key, folder, filename, project_title):
                 return None
 
         return supabase.storage.from_("portfolio-assets").get_public_url(path)
+
+    print(f"PIPELINE ERROR: Could not find file key '{file_key}' or '{filename}'")
     return None
 
 def safe_upload(file_key, folder, default_filename, project_title):
@@ -115,6 +119,10 @@ def get_projects():
 @app.route('/api/admin/sync-project', methods=['POST'])
 def sync_project_pipeline():
     try:
+        print("DEBUG: Request files received:", list(request.files.keys()))
+        for key in request.files:
+            print(f"DEBUG: Found key: '{key}' | Filename: '{request.files[key].filename}'")
+
         pipeline_state = {
             "files_uploaded": [],
             "db_written": False
