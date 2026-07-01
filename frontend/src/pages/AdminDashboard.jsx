@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import {
   UploadCloud,
   LogOut,
   Terminal,
   ShieldAlert,
-  FileCode
+  FileCode,
+  ArrowLeft
 } from 'lucide-react'
 
 export default function AdminDashboard () {
@@ -244,7 +246,7 @@ export default function AdminDashboard () {
     }
   }
 
-const handleFolderSelect = async fileList => {
+  const handleFolderSelect = async fileList => {
     if (uploading) return
     setUploading(true)
     setError(null)
@@ -258,7 +260,7 @@ const handleFolderSelect = async fileList => {
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i]
         const baseName = file.name.split('/').pop().split('\\').pop()
-        
+
         if (baseName.toLowerCase() === 'info.csv') {
           infoCsvFile = file
         } else {
@@ -276,20 +278,28 @@ const handleFolderSelect = async fileList => {
       const lines = csvText.split('\n')
       const headers = lines[0].split(',')
       const values = lines[1].split(',')
-      
+
       const binaryName = values[headers.indexOf('binary_filename')]?.trim()
       const gifName = values[headers.indexOf('gif_filename')]?.trim()
 
       // 3. Append to FormData
       formData.append('info_csv', infoCsvFile)
-      
+
       otherFiles.forEach(file => {
+        // 1. Standardize baseName extraction
         const baseName = file.name.split('/').pop().split('\\').pop()
-        if (baseName === binaryName) {
+
+        // 2. Map files based on CSV-defined names, but provide a fallback logic
+        // if you want to enforce specific naming conventions (e.g., 'demo.gif')
+        if (binaryName && baseName === binaryName) {
           formData.append('binary_filename', file)
-        } else if (baseName === gifName) {
+        } else if (gifName && baseName === gifName) {
+          formData.append('gif_filename', file)
+        } else if (baseName === 'demo.gif') {
+          // Hard fallback if CSV field is empty but file exists
           formData.append('gif_filename', file)
         } else {
+          // Everything else (screenshots, etc.)
           formData.append(baseName, file)
         }
       })
@@ -306,6 +316,19 @@ const handleFolderSelect = async fileList => {
     }
   }
 
+  useEffect(() => {
+    const handleBeforeUnload = e => {
+      if (uploading) {
+        e.preventDefault()
+        e.returnValue =
+          'An upload is in progress. If you refresh, the upload will be cancelled.'
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [uploading])
+
   const streamPayloadToPipeline = formData => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
@@ -319,7 +342,11 @@ const handleFolderSelect = async fileList => {
       xhr.upload.onprogress = event => {
         if (event.lengthComputable) {
           const percentage = Math.round((event.loaded / event.total) * 100)
-          setUploadProgress(percentage)
+          if (percentage >= 100) {
+            setUploadProgress(100) // Keep at 100
+          } else {
+            setUploadProgress(percentage)
+          }
         }
       }
 
@@ -459,13 +486,18 @@ const handleFolderSelect = async fileList => {
   }
 
   // --- 2. PROTECTED ADMIN PANEL ---
-  // --- 2. PROTECTED ADMIN PANEL ---
   return (
     <div className='min-h-screen bg-gray-900 text-gray-100 font-sans p-6 sm:p-12'>
       <div className='max-w-4xl mx-auto space-y-8'>
         {/* Header Console Row */}
         <header className='flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 pb-6'>
           <div>
+            <Link
+              to='/'
+              className='flex items-center gap-2 text-emerald-400 hover:text-emerald-300 text-sm font-mono mb-4'
+            >
+              <ArrowLeft size={16} /> Back to Homepage
+            </Link>
             <h1 className='text-2xl font-black text-white tracking-tight flex items-center gap-2.5'>
               <Terminal className='text-emerald-400 stroke-[2.5]' size={24} />
               SYSTEM INGESTION ENGINE
@@ -534,7 +566,9 @@ const handleFolderSelect = async fileList => {
               <div className='space-y-1.5'>
                 <p className='text-base font-semibold text-slate-200'>
                   {uploading
-                    ? `Processing & streaming asset build... (${uploadProgress}%)`
+                    ? uploadProgress >= 100
+                      ? 'Upload complete. Processing files on server...'
+                      : `Uploading project assets... (${uploadProgress}%)`
                     : 'Drag & drop or click to select project folder'}
                 </p>
 
@@ -582,7 +616,9 @@ const handleFolderSelect = async fileList => {
 
                 <div className='flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-950 border border-gray-800/80 text-[10px] font-mono text-slate-400 shadow-sm'>
                   <span className='w-1.5 h-1.5 rounded-full bg-blue-400'></span>
-                  <span>/ScreenShots (Folder cluster)</span>
+                  <span class='px-2 py-1 bg-slate-700 rounded-md text-xs font-medium text-slate-300'>
+                    4 Screenshots attached
+                  </span>
                 </div>
               </div>
             </div>
