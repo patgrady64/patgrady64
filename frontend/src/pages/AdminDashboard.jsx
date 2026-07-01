@@ -244,42 +244,59 @@ export default function AdminDashboard () {
     }
   }
 
-  const handleFolderSelect = async fileList => {
+const handleFolderSelect = async fileList => {
     if (uploading) return
     setUploading(true)
     setError(null)
 
     try {
       const formData = new FormData()
-      let hasInfoCsv = false
+      let infoCsvFile = null
+      const otherFiles = []
 
+      // 1. Separate the CSV from the other files
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i]
-
-        // Extract clean base filename regardless of nested folder string paths
         const baseName = file.name.split('/').pop().split('\\').pop()
-
+        
         if (baseName.toLowerCase() === 'info.csv') {
-          formData.append('info_csv', file)
-        } else if (baseName === binary_filename_from_csv) {
-          // You need to know these names
-          formData.append('binary_filename', file)
-        } else if (baseName === gif_filename_from_csv) {
-          formData.append('gif_filename', file)
+          infoCsvFile = file
         } else {
-          formData.append(baseName, file) // Screenshots or other files
+          otherFiles.push(file)
         }
       }
 
-      if (!hasInfoCsv) {
-        throw new Error(
-          "Missing mandatory 'info.csv' configuration file in selected directory."
-        )
+      if (!infoCsvFile) {
+        throw new Error("Missing mandatory 'info.csv' configuration file.")
       }
+
+      // 2. Read CSV to get filenames
+      const csvText = await infoCsvFile.text()
+      // Basic CSV parsing logic to find the headers
+      const lines = csvText.split('\n')
+      const headers = lines[0].split(',')
+      const values = lines[1].split(',')
+      
+      const binaryName = values[headers.indexOf('binary_filename')]?.trim()
+      const gifName = values[headers.indexOf('gif_filename')]?.trim()
+
+      // 3. Append to FormData
+      formData.append('info_csv', infoCsvFile)
+      
+      otherFiles.forEach(file => {
+        const baseName = file.name.split('/').pop().split('\\').pop()
+        if (baseName === binaryName) {
+          formData.append('binary_filename', file)
+        } else if (baseName === gifName) {
+          formData.append('gif_filename', file)
+        } else {
+          formData.append(baseName, file)
+        }
+      })
 
       const result = await streamPayloadToPipeline(formData)
       console.log('Folder Selection Synchronized Successfully:', result)
-      fetchProjects() // Refresh table dashboard data
+      fetchProjects()
     } catch (err) {
       console.error('Selection Upload Error:', err)
       setError(err.message)
