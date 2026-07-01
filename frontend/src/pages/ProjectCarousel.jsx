@@ -6,6 +6,7 @@ export default function ProjectCarousel ({
   onImageClick,
   onImageChange
 }) {
+  console.log('🖼 Carousel images:', images)
   const [index, setIndex] = useState(0)
 
   const next = e => {

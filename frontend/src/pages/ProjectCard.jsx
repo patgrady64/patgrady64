@@ -4,10 +4,16 @@ import Modal from './Modal'
 import './ProjectCard.css'
 
 export default function ProjectCard ({ project }) {
+  
+  const screenshots = Array.isArray(project.screenshot_urls)
+    ? project.screenshot_urls
+    : typeof project.screenshot_urls === 'string'
+    ? project.screenshot_urls.split(';').filter(Boolean)
+    : []
+
   const [isFlipped, setIsFlipped] = useState(false)
 
-  const [activeImage, setActiveImage] = useState(project.screenshot_urls?.[0])
-
+  const [activeImage, setActiveImage] = useState(screenshots[0])
   const [modal, setModal] = useState({
     isOpen: false,
     title: '',
@@ -54,7 +60,7 @@ export default function ProjectCard ({ project }) {
                 }}
               >
                 <ProjectCarousel
-                  images={project.screenshot_urls}
+                  images={screenshots}
                   onImageChange={setActiveImage}
                 />
               </div>
@@ -109,20 +115,30 @@ export default function ProjectCard ({ project }) {
             </div>
 
             {/* GIF */}
-            <div className='px-5 mt-3 flex-shrink-0'>
-              <div
-                className='h-32 bg-gray-950 rounded-lg overflow-hidden border border-gray-800'
-                onClick={e => {
-                  e.stopPropagation()
+            <div
+              className='h-32 bg-gray-950 rounded-lg overflow-hidden border border-gray-800'
+              onClick={e => {
+                e.stopPropagation()
+                // Add a check to ensure gif_url exists before opening the modal
+                if (project.gif_url)
                   openModal(e, 'Demo', project.gif_url, 'image')
-                }}
-              >
+              }}
+            >
+              {project.gif_url ? (
                 <img
                   src={project.gif_url}
                   alt='Demo'
                   className='w-full h-full object-contain'
+                  onError={e => {
+                    e.target.style.display = 'none'
+                    console.error('GIF failed to load:', project.gif_url)
+                  }}
                 />
-              </div>
+              ) : (
+                <div className='flex items-center justify-center h-full text-gray-600 text-xs'>
+                  No GIF
+                </div>
+              )}
             </div>
 
             {/* BODY */}

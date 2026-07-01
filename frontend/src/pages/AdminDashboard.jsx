@@ -1,34 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useBlocker } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import {
-  UploadCloud,
-  LogOut,
-  Terminal,
-  ShieldAlert,
-  FileCode,
-  ArrowLeft
-} from 'lucide-react'
+import { UploadCloud, LogOut, Terminal, ArrowLeft } from 'lucide-react'
 
 export default function AdminDashboard () {
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      uploading && currentLocation.pathname !== nextLocation.pathname
+      activeTask.type === 'upload' &&
+      currentLocation.pathname !== nextLocation.pathname
   )
-
-  const hasAsset = (folder, project, name) => {
-    const found = existingFiles.some(f => {
-      const isMatch =
-        f.folder === folder && f.project === project && f.name === name
-      if (!isMatch && f.project === project && f.folder === folder) {
-        console.log(
-          `Mismatch! Expected: "${name}", Found in storage: "${f.name}"`
-        )
-      }
-      return isMatch
-    })
-    return found
-  }
 
   const [session, setSession] = useState(null)
   const [email, setEmail] = useState('')
@@ -37,21 +17,11 @@ export default function AdminDashboard () {
   const [error, setError] = useState(null)
 
   const [fetchingProjects, setFetchingProjects] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
   const [activeTask, setActiveTask] = useState({
     type: null,
     progress: 0,
     message: ''
   })
-
-  const [projects, setProjects] = useState([])
-  const [expandedProjects, setExpandedProjects] = useState({})
-  const [existingFiles, setExistingFiles] = useState([])
-
-  const [statusMessage, setStatusMessage] = useState('')
-
-  const [isDeleting, setIsDeleting] = useState(false)
 
   const fileInputRef = React.useRef(null)
 
@@ -66,76 +36,13 @@ export default function AdminDashboard () {
         `${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`
       )
       const rawData = await res.json()
-
-      // Transform flat file list into unique project objects
-      const projectMap = new Map()
-      rawData.forEach(file => {
-        if (!projectMap.has(file.project)) {
-          projectMap.set(file.project, {
-            id: file.project, // Using project name as ID if no UUID exists
-            type: 'Project',
-            title: file.project,
-            status: 'Synced',
-            metadata: { tech: [] } // Initialize structure
-          })
-        }
-      })
-
-      setRegistry(Array.from(projectMap.values()))
+      setRegistry(rawData)
     } catch (err) {
       console.error('Failed to sync registry:', err)
     } finally {
       setFetchingProjects(false)
     }
   }
-
-  const getScreenshotCount = projectTitle => {
-    const files = existingFiles.filter(
-      f => f.folder === 'screenshots' && f.project === projectTitle
-    )
-    console.log(`Found ${files.length} screenshots for ${projectTitle}:`, files)
-    return files.length
-  }
-
-  const groupedFiles = React.useMemo(() => {
-    // 1. Provide {} as the initial value to prevent "empty array" errors
-    return existingFiles.reduce((acc, file) => {
-      // 2. Safely access the properties returned by your Flask backend (app.py)
-      const { project, folder, name } = file
-
-      if (!project) return acc
-
-      if (!acc[project]) {
-        acc[project] = []
-      }
-
-      acc[project].push({ folder, name })
-      return acc
-    }, {}) // <--- This empty object is mandatory
-  }, [existingFiles])
-
-  const toggleProject = projectName => {
-    setExpandedProjects(prev => ({
-      ...prev,
-      [projectName]: !prev[projectName]
-    }))
-  }
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-    })
-
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  const API_BASE = 'https://patgrady64.onrender.com'
 
   const handleDelete = async id => {
     if (!window.confirm('Permanently delete this project and all assets?'))
@@ -191,24 +98,6 @@ export default function AdminDashboard () {
     await supabase.auth.signOut()
   }
 
-  useEffect(() => {
-    fetchRegistry()
-  }, [session])
-
-  useEffect(() => {
-    if (!session) return
-
-    fetch(`${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`)
-      .then(res => res.json())
-      .then(data => {
-        setExistingFiles(Array.isArray(data) ? data : [])
-      })
-      .catch(err => {
-        console.error('Asset fetch failed:', err)
-      })
-  }, [session])
-
-  // --- DRAG AND DROP PIPELINE INTERCEPT HANDLERS ---
   const handleDragOver = e => {
     e.preventDefault()
     e.stopPropagation()
@@ -217,14 +106,8 @@ export default function AdminDashboard () {
   const handleDrop = async e => {
     e.preventDefault()
     e.stopPropagation()
-
-    // 1. Check activeTask instead of uploading
     if (activeTask.type) return
 
-    const items = e.dataTransfer.items
-    if (!items || items.length === 0) return
-
-    // 2. Set the active task
     setActiveTask({
       type: 'upload',
       progress: 0,
@@ -233,146 +116,114 @@ export default function AdminDashboard () {
     setError(null)
 
     try {
-      const formData = new FormData()
-      const filePromises = []
+      const allFiles = [] // Collect all file objects here
 
-      // Helper function to recursively read files from directories (DataTransferItem/FileSystemEntry API)
-      const traverseDirectory = (entry, path = '') => {
-        return new Promise((resolve, reject) => {
+      // Updated traverseDirectory to push files into allFiles array
+      const traverseDirectory = entry => {
+        return new Promise(resolve => {
           if (entry.isFile) {
             entry.file(file => {
-              // Map the plain file object into the proper target parameter name for our endpoint
-              if (file.name === 'info.csv') {
-                formData.append('info_csv', file)
-              } else {
-                if (file.name === 'info.csv') {
-                  formData.append('info_csv', file)
-                } else if (
-                  file.name.endsWith('.apk') ||
-                  file.name.endsWith('.exe')
-                ) {
-                  formData.append('binary_filename', file)
-                } else if (file.name.endsWith('.gif')) {
-                  formData.append('gif_filename', file)
-                } else {
-                  formData.append(file.webkitRelativePath || file.name, file)
-                }
-              }
+              allFiles.push(file)
               resolve()
-            }, reject)
+            })
           } else if (entry.isDirectory) {
             const dirReader = entry.createReader()
             dirReader.readEntries(async entries => {
-              const promises = entries.map(innerEntry =>
-                traverseDirectory(innerEntry, `${path}${entry.name}/`)
-              )
-              await Promise.all(promises)
+              await Promise.all(entries.map(e => traverseDirectory(e)))
               resolve()
-            }, reject)
+            })
           }
         })
       }
 
-      // Loop over all top-level items dropped into the layout zone
+      // Gather items
+      const items = e.dataTransfer.items
+      const promises = []
       for (let i = 0; i < items.length; i++) {
-        const item = items[i]
-        if (item.kind === 'file') {
-          const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null
-          if (entry) {
-            filePromises.push(traverseDirectory(entry))
-          }
-        }
+        const entry = items[i].webkitGetAsEntry
+          ? items[i].webkitGetAsEntry()
+          : null
+        if (entry) promises.push(traverseDirectory(entry))
       }
+      await Promise.all(promises)
 
-      await Promise.all(filePromises)
-
-      if (!formData.has('info_csv')) {
-        throw new Error("Missing mandatory 'info.csv' configuration file.")
-      }
-
-      const result = await streamPayloadToPipeline(formData)
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      fetchRegistry()
+      // CALL THE SHARED FUNCTION
+      await processUploadedFiles(allFiles)
     } catch (err) {
-      console.error('Drop Upload Error:', err)
       setError(err.message)
     } finally {
-      // 3. Clear task instead of setUploading(false)
       setActiveTask({ type: null, progress: 0, message: '' })
     }
   }
 
   const handleFolderSelect = async fileList => {
     if (activeTask.type) return
-
-    setActiveTask({
-      type: 'upload',
-      progress: 0,
-      message: 'Processing files...'
-    })
-
+    setActiveTask({ type: 'upload', progress: 0, message: 'Processing...' })
     setError(null)
 
     try {
-      const files = Array.from(fileList)
-
-      const infoCsvFile = files.find(file => file.name === 'info.csv')
-
-      if (!infoCsvFile) {
-        throw new Error('Missing mandatory info.csv')
-      }
-
-      // Read the CSV
-      const csvText = await infoCsvFile.text()
-
-      const lines = csvText.trim().split('\n')
-      const headers = lines[0].split(',').map(h => h.trim())
-      const values = lines[1].split(',').map(v => v.trim())
-
-      const binaryName = values[headers.indexOf('binary_filename')] || ''
-
-      const gifName = values[headers.indexOf('gif_filename')] || ''
-
-      const formData = new FormData()
-
-      // Always include info.csv
-      formData.append('info_csv', infoCsvFile)
-
-      // Append all remaining files
-      files.forEach(file => {
-        if (file.name === 'info.csv') return
-
-        const baseName = file.name.split('/').pop().split('\\').pop()
-
-        if (baseName === binaryName) {
-          formData.append('binary_filename', file)
-        } else if (baseName === gifName) {
-          formData.append('gif_filename', file)
-        } else {
-          // screenshots and everything else
-          formData.append(baseName, file)
-        }
-      })
-
-      console.log('Uploading:')
-      for (const [key, value] of formData.entries()) {
-        console.log(key, value.name)
-      }
-
-      await streamPayloadToPipeline(formData)
-
-      await fetchRegistry()
+      await processUploadedFiles(Array.from(fileList))
     } catch (err) {
-      console.error('Selection Upload Error:', err)
       setError(err.message)
     } finally {
-      setActiveTask({
-        type: null,
-        progress: 0,
-        message: ''
-      })
+      setActiveTask({ type: null, progress: 0, message: '' })
     }
   }
+
+  const processUploadedFiles = async filesArray => {
+    console.log("STEP 1 REACHED")
+    const formData = new FormData()
+
+    // 1. Find CSV
+    const infoCsvFile = filesArray.find(f => f.name === 'info.csv')
+
+    if (!infoCsvFile) {
+      throw new Error('Missing info.csv')
+    }
+
+    // 2. Read CSV as TEXT (NOT parsing logic)
+    const csvText = await infoCsvFile.text()
+
+    // 3. Send manifest as raw text
+    formData.append('manifest', csvText)
+
+    // 4. Send all other files blindly
+    filesArray.forEach(file => {
+      if (file.name === 'info.csv') return
+      formData.append('files', file)
+    })
+
+    console.log('CSV FILE:', infoCsvFile)
+    console.log('CSV TEXT:', csvText)
+
+    // 5. Send to backend
+    console.log("🔥 ABOUT TO UPLOAD TO BACKEND")
+    console.log("STEP 2 ABOUT TO FETCH")
+    await fetch('http://localhost:5000/api/admin/sync', {
+      method: 'POST',
+      body: formData
+    })
+
+    await fetchRegistry()
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+    })
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    fetchRegistry()
+  }, [session])
 
   useEffect(() => {
     const channel = supabase
@@ -387,7 +238,7 @@ export default function AdminDashboard () {
 
   useEffect(() => {
     const handleBeforeUnload = e => {
-      if (uploading) {
+      if (activeTask.type === 'upload') {
         e.preventDefault()
         e.returnValue =
           'An upload is in progress. If you refresh, the upload will be cancelled.'
@@ -396,32 +247,7 @@ export default function AdminDashboard () {
 
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [uploading])
-
-  // Add this effect to poll for status updates
-  useEffect(() => {
-    let interval
-    if (uploading) {
-      interval = setInterval(async () => {
-        try {
-          const res = await fetch(
-            `${import.meta.env.VITE_API_URL}/api/admin/sync-status`
-          )
-          const data = await res.json()
-
-          // This updates the variables so the UI reacts
-          setUploadProgress(data.percent)
-          setStatusMessage(data.status)
-
-          // Stop polling if the process is finished
-          if (data.percent >= 100) clearInterval(interval)
-        } catch (err) {
-          console.error('Polling error:', err)
-        }
-      }, 1000) // Poll every second
-    }
-    return () => clearInterval(interval)
-  }, [uploading])
+  }, [activeTask.type])
 
   useEffect(() => {
     let interval
@@ -457,7 +283,7 @@ export default function AdminDashboard () {
       const xhr = new XMLHttpRequest()
       const targetUrl = `${
         import.meta.env.VITE_API_URL || 'http://localhost:5000'
-      }/api/admin/sync-project`
+      }/api/admin/sync`
 
       xhr.open('POST', targetUrl, true)
 
@@ -705,7 +531,7 @@ export default function AdminDashboard () {
                   </span>
                   . The pipeline dynamically routes files based on the CSV
                   schema, supporting multi-type ingestion including software
-                  binaries, project visuals, and cross-platform video assets.
+                  binaries, project demos, and cross-platform video assets.
                 </p>
               </div>
             </div>
@@ -765,7 +591,7 @@ export default function AdminDashboard () {
                       <td className='p-4 text-xs text-blue-400'>
                         {item.type === 'Project' &&
                           item.metadata?.tech?.join(', ')}
-                        {item.type === 'Video' && item.metadata?.platform}
+                        {item.type === 'YouTube' && item.metadata?.platform}
                         {item.type === 'Book' && `ISBN: ${item.metadata?.isbn}`}
                       </td>
 
