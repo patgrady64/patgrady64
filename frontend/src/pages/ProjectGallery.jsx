@@ -1,9 +1,9 @@
 import React from 'react'
 import ProjectCard from './ProjectCard'
 
-export default function ProjectGallery ({ projects }) {
+export default function ProjectGallery({ projects }) {
   return (
-    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8'>
+    <div className="flex flex-wrap justify-center gap-10">
       {projects.map(p => (
         <ProjectCard key={p.id} project={p} />
       ))}
