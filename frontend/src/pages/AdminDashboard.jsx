@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useBlocker } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import {
   UploadCloud,
@@ -11,6 +11,11 @@ import {
 } from 'lucide-react'
 
 export default function AdminDashboard () {
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      uploading && currentLocation.pathname !== nextLocation.pathname
+  )
+
   const hasAsset = (folder, project, name) => {
     const found = existingFiles.some(f => {
       const isMatch =
@@ -34,21 +39,51 @@ export default function AdminDashboard () {
   const [fetchingProjects, setFetchingProjects] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [activeTask, setActiveTask] = useState({
+    type: null,
+    progress: 0,
+    message: ''
+  })
 
   const [projects, setProjects] = useState([])
   const [expandedProjects, setExpandedProjects] = useState({})
   const [existingFiles, setExistingFiles] = useState([])
 
+  const [statusMessage, setStatusMessage] = useState('')
+
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const fileInputRef = React.useRef(null)
 
-  const fetchProjects = async () => {
+  // Change your state definition
+  const [registry, setRegistry] = useState([])
+
+  // Update your fetch logic to aggregate data
+  const fetchRegistry = async () => {
     setFetchingProjects(true)
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/projects`)
-      const data = await res.json()
-      setProjects(data)
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`
+      )
+      const rawData = await res.json()
+
+      // Transform flat file list into unique project objects
+      const projectMap = new Map()
+      rawData.forEach(file => {
+        if (!projectMap.has(file.project)) {
+          projectMap.set(file.project, {
+            id: file.project, // Using project name as ID if no UUID exists
+            type: 'Project',
+            title: file.project,
+            status: 'Synced',
+            metadata: { tech: [] } // Initialize structure
+          })
+        }
+      })
+
+      setRegistry(Array.from(projectMap.values()))
     } catch (err) {
-      console.error('Failed to fetch projects:', err)
+      console.error('Failed to sync registry:', err)
     } finally {
       setFetchingProjects(false)
     }
@@ -102,22 +137,41 @@ export default function AdminDashboard () {
 
   const API_BASE = 'https://patgrady64.onrender.com'
 
-  useEffect(() => {
-    if (session) {
-      const url = `${API_BASE}/api/admin/check-all-assets`
-      console.log('Fetching from:', url) // Verify this matches your backend
-      fetch(url)
-        .then(res => {
-          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`)
-          return res.json()
-        })
-        .then(data => {
-          console.log('Files received:', data)
-          setExistingFiles(data || [])
-        })
-        .catch(err => console.error('Fetch failed:', err))
+  const handleDelete = async id => {
+    if (!window.confirm('Permanently delete this project and all assets?'))
+      return
+
+    setActiveTask({
+      type: 'delete',
+      progress: 0,
+      message: 'Initiating deletion...'
+    })
+
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/admin/delete/${id}`,
+        {
+          method: 'DELETE'
+        }
+      )
+
+      if (res.ok) {
+        // 1. Refresh the inventory list from the database
+        await fetchRegistry()
+
+        // 2. Clear the active task after a brief moment to show "Done"
+        setTimeout(
+          () => setActiveTask({ type: null, progress: 0, message: '' }),
+          1000
+        )
+      } else {
+        throw new Error('Server rejected deletion')
+      }
+    } catch (err) {
+      console.error('Delete operation failed:', err)
+      setActiveTask({ type: null, progress: 0, message: '' })
     }
-  }, [session])
+  }
 
   const handleLogin = async e => {
     e.preventDefault()
@@ -137,22 +191,8 @@ export default function AdminDashboard () {
     await supabase.auth.signOut()
   }
 
-  // Fetch projects from live production database API
   useEffect(() => {
-    if (!session) return
-
-    fetch(`${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`)
-      .then(res => res.json())
-      .then(data => {
-        setExistingFiles(Array.isArray(data) ? data : [])
-      })
-      .catch(err => {
-        console.error('Asset check failed:', err)
-      })
-  }, [session])
-
-  useEffect(() => {
-    fetchProjects()
+    fetchRegistry()
   }, [session])
 
   useEffect(() => {
@@ -178,12 +218,18 @@ export default function AdminDashboard () {
     e.preventDefault()
     e.stopPropagation()
 
-    if (uploading) return
+    // 1. Check activeTask instead of uploading
+    if (activeTask.type) return
 
     const items = e.dataTransfer.items
     if (!items || items.length === 0) return
 
-    setUploading(true)
+    // 2. Set the active task
+    setActiveTask({
+      type: 'upload',
+      progress: 0,
+      message: 'Preparing upload...'
+    })
     setError(null)
 
     try {
@@ -199,7 +245,18 @@ export default function AdminDashboard () {
               if (file.name === 'info.csv') {
                 formData.append('info_csv', file)
               } else {
-                formData.append(file.name, file)
+                if (file.name === 'info.csv') {
+                  formData.append('info_csv', file)
+                } else if (
+                  file.name.endsWith('.apk') ||
+                  file.name.endsWith('.exe')
+                ) {
+                  formData.append('binary_filename', file)
+                } else if (file.name.endsWith('.gif')) {
+                  formData.append('gif_filename', file)
+                } else {
+                  formData.append(file.webkitRelativePath || file.name, file)
+                }
               }
               resolve()
             }, reject)
@@ -230,91 +287,103 @@ export default function AdminDashboard () {
       await Promise.all(filePromises)
 
       if (!formData.has('info_csv')) {
-        throw new Error(
-          "Missing mandatory 'info.csv' configuration file in dropped structure."
-        )
+        throw new Error("Missing mandatory 'info.csv' configuration file.")
       }
 
       const result = await streamPayloadToPipeline(formData)
-      fetchProjects()
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      fetchRegistry()
     } catch (err) {
       console.error('Drop Upload Error:', err)
       setError(err.message)
     } finally {
-      setUploading(false)
-      setUploadProgress(0)
+      // 3. Clear task instead of setUploading(false)
+      setActiveTask({ type: null, progress: 0, message: '' })
     }
   }
 
   const handleFolderSelect = async fileList => {
-    if (uploading) return
-    setUploading(true)
+    if (activeTask.type) return
+
+    setActiveTask({
+      type: 'upload',
+      progress: 0,
+      message: 'Processing files...'
+    })
+
     setError(null)
 
     try {
-      const formData = new FormData()
-      let infoCsvFile = null
-      const otherFiles = []
+      const files = Array.from(fileList)
 
-      // 1. Separate the CSV from the other files
-      for (let i = 0; i < fileList.length; i++) {
-        const file = fileList[i]
-        const baseName = file.name.split('/').pop().split('\\').pop()
-
-        if (baseName.toLowerCase() === 'info.csv') {
-          infoCsvFile = file
-        } else {
-          otherFiles.push(file)
-        }
-      }
+      const infoCsvFile = files.find(file => file.name === 'info.csv')
 
       if (!infoCsvFile) {
-        throw new Error("Missing mandatory 'info.csv' configuration file.")
+        throw new Error('Missing mandatory info.csv')
       }
 
-      // 2. Read CSV to get filenames
+      // Read the CSV
       const csvText = await infoCsvFile.text()
-      // Basic CSV parsing logic to find the headers
-      const lines = csvText.split('\n')
-      const headers = lines[0].split(',')
-      const values = lines[1].split(',')
 
-      const binaryName = values[headers.indexOf('binary_filename')]?.trim()
-      const gifName = values[headers.indexOf('gif_filename')]?.trim()
+      const lines = csvText.trim().split('\n')
+      const headers = lines[0].split(',').map(h => h.trim())
+      const values = lines[1].split(',').map(v => v.trim())
 
-      // 3. Append to FormData
+      const binaryName = values[headers.indexOf('binary_filename')] || ''
+
+      const gifName = values[headers.indexOf('gif_filename')] || ''
+
+      const formData = new FormData()
+
+      // Always include info.csv
       formData.append('info_csv', infoCsvFile)
 
-      otherFiles.forEach(file => {
-        // 1. Standardize baseName extraction
+      // Append all remaining files
+      files.forEach(file => {
+        if (file.name === 'info.csv') return
+
         const baseName = file.name.split('/').pop().split('\\').pop()
 
-        // 2. Map files based on CSV-defined names, but provide a fallback logic
-        // if you want to enforce specific naming conventions (e.g., 'demo.gif')
-        if (binaryName && baseName === binaryName) {
+        if (baseName === binaryName) {
           formData.append('binary_filename', file)
-        } else if (gifName && baseName === gifName) {
-          formData.append('gif_filename', file)
-        } else if (baseName === 'demo.gif') {
-          // Hard fallback if CSV field is empty but file exists
+        } else if (baseName === gifName) {
           formData.append('gif_filename', file)
         } else {
-          // Everything else (screenshots, etc.)
+          // screenshots and everything else
           formData.append(baseName, file)
         }
       })
 
-      const result = await streamPayloadToPipeline(formData)
-      console.log('Folder Selection Synchronized Successfully:', result)
-      fetchProjects()
+      console.log('Uploading:')
+      for (const [key, value] of formData.entries()) {
+        console.log(key, value.name)
+      }
+
+      await streamPayloadToPipeline(formData)
+
+      await fetchRegistry()
     } catch (err) {
       console.error('Selection Upload Error:', err)
       setError(err.message)
     } finally {
-      setUploading(false)
-      setUploadProgress(0)
+      setActiveTask({
+        type: null,
+        progress: 0,
+        message: ''
+      })
     }
   }
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
+        fetchRegistry() // Re-fetch the registry whenever a change occurs in Supabase
+      })
+      .subscribe()
+
+    return () => supabase.removeChannel(channel)
+  }, [])
 
   useEffect(() => {
     const handleBeforeUnload = e => {
@@ -329,6 +398,60 @@ export default function AdminDashboard () {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [uploading])
 
+  // Add this effect to poll for status updates
+  useEffect(() => {
+    let interval
+    if (uploading) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(
+            `${import.meta.env.VITE_API_URL}/api/admin/sync-status`
+          )
+          const data = await res.json()
+
+          // This updates the variables so the UI reacts
+          setUploadProgress(data.percent)
+          setStatusMessage(data.status)
+
+          // Stop polling if the process is finished
+          if (data.percent >= 100) clearInterval(interval)
+        } catch (err) {
+          console.error('Polling error:', err)
+        }
+      }, 1000) // Poll every second
+    }
+    return () => clearInterval(interval)
+  }, [uploading])
+
+  useEffect(() => {
+    let interval
+    if (activeTask.type) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(
+            `${import.meta.env.VITE_API_URL}/api/admin/sync-status`
+          )
+          const data = await res.json()
+          setActiveTask(prev => ({
+            ...prev,
+            progress: data.percent,
+            message: data.status
+          }))
+          if (data.percent >= 100) {
+            clearInterval(interval)
+            setTimeout(
+              () => setActiveTask({ type: null, progress: 0, message: '' }),
+              1500
+            )
+          }
+        } catch (err) {
+          console.error('Polling error:', err)
+        }
+      }, 1000)
+    }
+    return () => clearInterval(interval)
+  }, [activeTask.type])
+
   const streamPayloadToPipeline = formData => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
@@ -342,11 +465,12 @@ export default function AdminDashboard () {
       xhr.upload.onprogress = event => {
         if (event.lengthComputable) {
           const percentage = Math.round((event.loaded / event.total) * 100)
-          if (percentage >= 100) {
-            setUploadProgress(100) // Keep at 100
-          } else {
-            setUploadProgress(percentage)
-          }
+          // Update the activeTask state directly
+          setActiveTask(prev => ({
+            ...prev,
+            progress: percentage,
+            message: `Uploading: ${percentage}%`
+          }))
         }
       }
 
@@ -521,105 +645,68 @@ export default function AdminDashboard () {
           <div
             onDragOver={handleDragOver}
             onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()} // <-- Triggers picker on click
-            className={`group relative bg-gradient-to-b from-gray-950/40 to-gray-950/80 border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-950/5 flex flex-col items-center justify-center min-h-[340px] cursor-pointer ${
-              uploading
-                ? 'border-amber-500/50 bg-amber-950/5'
-                : 'border-gray-800 hover:border-emerald-500/40'
-            }`}
+            onClick={() => fileInputRef.current?.click()}
+            className='group relative bg-gradient-to-b from-gray-950/40 to-gray-950/80 border-2 border-dashed rounded-3xl p-8 text-center transition-all duration-300 hover:border-emerald-500/40 cursor-pointer border-gray-800'
           >
-            {/* INVISIBLE FOLDER PICKER INPUT */}
             <input
               type='file'
               ref={fileInputRef}
               onChange={e => {
-                if (e.target.files && e.target.files.length > 0) {
+                if (e.target.files && e.target.files.length > 0)
                   handleFolderSelect(e.target.files)
-                }
               }}
               style={{ display: 'none' }}
-              webkitdirectory='' // <-- Essential for folder access
-              directory='' // <-- Fallback for alternative engines
+              webkitdirectory=''
+              directory=''
               multiple
             />
 
-            <div className='absolute inset-0 bg-emerald-500/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-3xl pointer-events-none'></div>
-
-            <div className='relative z-10 max-w-sm mx-auto space-y-4'>
-              <div
-                className={`w-16 h-16 mx-auto rounded-2xl bg-gray-900 border flex items-center justify-center shadow-inner transition-colors duration-300 ${
-                  uploading
-                    ? 'border-amber-500/30 bg-gray-900/40'
-                    : 'border-gray-800 group-hover:border-emerald-500/20 group-hover:bg-gray-900/60'
-                }`}
-              >
-                <UploadCloud
-                  className={`transition-colors duration-300 stroke-[1.5] ${
-                    uploading
-                      ? 'text-amber-400 animate-bounce'
-                      : 'text-gray-500 group-hover:text-emerald-400'
-                  }`}
-                  size={32}
-                />
-              </div>
-
-              <div className='space-y-1.5'>
-                <p className='text-base font-semibold text-slate-200'>
-                  {uploading
-                    ? uploadProgress >= 100
-                      ? 'Upload complete. Processing files on server...'
-                      : `Uploading project assets... (${uploadProgress}%)`
-                    : 'Drag & drop or click to select project folder'}
-                </p>
-
-                {/* Progress Bar Container Track */}
-                {uploading && (
-                  <div className='w-full max-w-xs mx-auto bg-gray-900 h-2 rounded-full overflow-hidden border border-gray-800 p-0.5 mt-3 shadow-inner'>
-                    <div
-                      className='bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300 ease-out shadow-[0_0_8px_rgba(16,185,129,0.4)]'
-                      style={{ width: `${uploadProgress}%` }}
-                    ></div>
-                  </div>
-                )}
-
-                <p className='text-xs text-gray-500 max-w-xs mx-auto leading-relaxed pt-1'>
-                  {error ? (
-                    <span className='text-red-400 font-mono block'>
-                      {error}
-                    </span>
-                  ) : (
-                    <>
-                      Select or drop a localized production directory containing
-                      a structural{' '}
-                      <span className='text-amber-400 font-mono'>info.csv</span>{' '}
-                      file and compiled application assets.
-                    </>
-                  )}
+            <div className='relative z-10 max-w-lg mx-auto space-y-6'>
+              <div className='text-center space-y-2'>
+                <h2 className='text-lg font-bold text-white'>
+                  System Ingestion Pipeline
+                </h2>
+                <p className='text-sm text-gray-400'>
+                  Upload project directories or YouTube metadata manifests. The
+                  system processes assets based on the definitions provided in
+                  your{' '}
+                  <span className='text-amber-400 font-mono'>info.csv</span>,
+                  which governs the mapping for both software projects and video
+                  content.
                 </p>
               </div>
 
-              <div className='flex flex-wrap items-center justify-center gap-2 max-w-md mx-auto pt-2'>
-                <div className='flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-950 border border-gray-800/80 text-[10px] font-mono text-slate-400 shadow-sm'>
-                  <FileCode size={12} className='text-emerald-400' />
-                  <span>info.csv</span>
+              {/* Unified Progress UI */}
+              {activeTask.type && (
+                <div className='w-full max-w-xs mx-auto bg-gray-900 h-2 rounded-full overflow-hidden border border-gray-800 p-0.5 mt-3'>
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      activeTask.type === 'delete'
+                        ? 'bg-red-500'
+                        : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                    }`}
+                    style={{ width: `${activeTask.progress}%` }}
+                  />
                 </div>
-
-                <div className='flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-950 border border-gray-800/80 text-[10px] font-mono text-slate-400 shadow-sm'>
-                  <ShieldAlert size={12} className='text-purple-400' />
-                  <span>Application Binaries (.apk / .zip)</span>
-                </div>
-
-                <div className='flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-950 border border-gray-800/80 text-[10px] font-mono text-slate-400 shadow-sm'>
-                  <span className='w-1.5 h-1.5 rounded-full bg-amber-400'></span>
-                  <span>demo.gif (Hero visual)</span>
-                </div>
-
-                <div className='flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-950 border border-gray-800/80 text-[10px] font-mono text-slate-400 shadow-sm'>
-                  <span className='w-1.5 h-1.5 rounded-full bg-blue-400'></span>
-                  <span class='px-2 py-1 bg-slate-700 rounded-md text-xs font-medium text-slate-300'>
-                    4 Screenshots attached
+              )}
+              {activeTask.message && (
+                <p className='text-center text-xs mt-2 text-gray-400 font-mono'>
+                  {activeTask.message}
+                </p>
+              )}
+              <div className='p-8 bg-gray-950 rounded-xl border border-gray-800 text-center shadow-lg'>
+                <p className='text-sm font-bold text-gray-200 uppercase tracking-widest mb-4'>
+                  Protocol Requirements
+                </p>
+                <p className='text-base text-gray-400 leading-relaxed max-w-md mx-auto'>
+                  Ensure each upload contains a valid{' '}
+                  <span className='font-mono text-emerald-400 font-bold'>
+                    info.csv
                   </span>
-                </div>
+                  . The pipeline dynamically routes files based on the CSV
+                  schema, supporting multi-type ingestion including software
+                  binaries, project visuals, and cross-platform video assets.
+                </p>
               </div>
             </div>
           </div>
@@ -633,7 +720,7 @@ export default function AdminDashboard () {
               Cloud Sync Inventory
             </h2>
             <span className='text-xs font-mono text-gray-500'>
-              {projects.length} Total Records Loaded
+              {registry.length} Total Records Loaded
             </span>
           </div>
 
@@ -641,7 +728,7 @@ export default function AdminDashboard () {
             <div className='p-12 text-center text-sm font-mono text-gray-500'>
               Querying database registry...
             </div>
-          ) : projects.length === 0 ? (
+          ) : registry.length === 0 ? (
             <div className='p-12 text-center text-sm font-mono text-gray-500'>
               No project records detected in deployment environment database.
             </div>
@@ -650,92 +737,51 @@ export default function AdminDashboard () {
               <table className='w-full text-left border-collapse font-sans'>
                 <thead>
                   <tr className='border-b border-gray-800 bg-gray-900/30 text-xs font-mono text-gray-400'>
-                    <th className='p-4 font-semibold'>Project Title</th>
                     <th className='p-4 font-semibold'>Type</th>
-                    <th className='p-4 font-semibold'>Tech Stack</th>
-                    <th className='p-4 font-semibold'>Target Distribution</th>
+                    <th className='p-4 font-semibold'>Title</th>
+                    <th className='p-4 font-semibold'>Metadata</th>
+                    <th className='p-4 font-semibold'>Status</th>
+                    <th className='p-4 font-semibold'>Actions</th>
                   </tr>
                 </thead>
+
                 <tbody className='text-sm divide-y divide-gray-900'>
-                  {projects.map(project => (
-                    <tr key={project.id} className='border-b border-gray-800'>
-                      <td className='p-4 text-white font-medium'>
-                        {project.title}
+                  {registry.map(item => (
+                    <tr
+                      key={item.id}
+                      className='border-b border-gray-800 hover:bg-gray-900/20'
+                    >
+                      {/* 1. Type */}
+                      <td className='p-4 text-xs uppercase font-bold text-gray-400'>
+                        {item.type}
                       </td>
+
+                      {/* 2. Title */}
+                      <td className='p-4 font-semibold text-white'>
+                        {item.title}
+                      </td>
+
+                      {/* 3. Metadata (Safely access) */}
+                      <td className='p-4 text-xs text-blue-400'>
+                        {item.type === 'Project' &&
+                          item.metadata?.tech?.join(', ')}
+                        {item.type === 'Video' && item.metadata?.platform}
+                        {item.type === 'Book' && `ISBN: ${item.metadata?.isbn}`}
+                      </td>
+
+                      {/* 4. Status (Now correctly populated) */}
+                      <td className='p-4 text-xs text-emerald-500'>
+                        {item.status}
+                      </td>
+
+                      {/* 5. Delete Action */}
                       <td className='p-4'>
-                        <div className='flex flex-wrap gap-1 max-w-xs'>
-                          {/* Map Tech Stack */}
-                          {project.tech_stack?.map((tech, idx) => (
-                            <span
-                              key={idx}
-                              className='text-[10px] bg-blue-950/20 text-blue-400 px-1.5 py-0.5 rounded border border-blue-900/30'
-                            >
-                              {tech}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className='p-4'>
-                        <div className='flex flex-wrap gap-1 max-w-xs'>
-                          {/* Map Architecture Tags */}
-                          {project.architecture_tags?.map((arch, idx) => (
-                            <span
-                              key={idx}
-                              className='text-[10px] bg-purple-950/20 text-purple-400 px-1.5 py-0.5 rounded border border-purple-900/30'
-                            >
-                              {arch}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className='p-4 font-mono text-xs text-gray-400'>
-                        <a
-                          href={project.download_url}
-                          target='_blank'
-                          rel='noreferrer'
-                          className='block hover:underline'
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className='text-red-500'
                         >
-                          Binary ↗
-                        </a>
-                        <a
-                          href={project.gif_url}
-                          target='_blank'
-                          rel='noreferrer'
-                          className='block hover:underline'
-                        >
-                          GIF ↗
-                        </a>
-                      </td>
-                      ; ;
-                      <td className='p-4'>
-                        <div className='flex flex-col gap-1 text-xs'>
-                          <span>
-                            {hasAsset(
-                              'installers',
-                              project.title,
-                              project.binary_filename
-                            )
-                              ? '✅'
-                              : '❌'}{' '}
-                            Binary
-                          </span>
-                          <span>
-                            {hasAsset(
-                              'visuals',
-                              project.title,
-                              project.gif_filename
-                            )
-                              ? '✅'
-                              : '❌'}{' '}
-                            GIF
-                          </span>
-                          <span>
-                            {getScreenshotCount(project.title) === 4
-                              ? '✅'
-                              : '❌'}{' '}
-                            ({getScreenshotCount(project.title)}/4) Screenshots
-                          </span>
-                        </div>
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -745,6 +791,18 @@ export default function AdminDashboard () {
           )}
         </section>
       </div>
+      {blocker.state === 'blocked' ? (
+        <div className='upload-blocker-modal'>
+          <div className='modal-content'>
+            <p>
+              An upload is in progress. If you leave now, the upload will be
+              cancelled.
+            </p>
+            <button onClick={() => blocker.proceed()}>Leave Page</button>
+            <button onClick={() => blocker.reset()}>Stay and Continue</button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
