@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient'
 import { UploadCloud, LogOut, Terminal, ArrowLeft } from 'lucide-react'
 
 export default function AdminDashboard () {
+  const API_URL = import.meta.env.VITE_API_URL || ''
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       activeTask.type === 'upload' &&
@@ -32,17 +33,25 @@ export default function AdminDashboard () {
   const fetchRegistry = async () => {
     setFetchingProjects(true)
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/admin/check-all-assets`
-      )
-      const rawData = await res.json()
-      setRegistry(rawData)
-    } catch (err) {
-      console.error('Failed to sync registry:', err)
+      const res = await fetch(`${API_URL}/api/admin/registry`)
+      const data = await res.json()
+      setRegistry(data)
     } finally {
       setFetchingProjects(false)
     }
   }
+
+  const [youtubeVideos, setYoutubeVideos] = useState([]) // 1. Add state to hold the videos
+
+  useEffect(() => {
+    // 2. Fetch the YouTube data from your new backend route
+    fetch(`${API_URL}/api/youtube`)
+      .then(res => res.json())
+      .then(data => {
+        setYoutubeVideos(Array.isArray(data) ? data : [])
+      })
+      .catch(err => console.error('Error fetching YouTube videos:', err))
+  }, [API_URL])
 
   const handleDelete = async id => {
     if (!window.confirm('Permanently delete this project and all assets?'))
@@ -171,7 +180,7 @@ export default function AdminDashboard () {
   }
 
   const processUploadedFiles = async filesArray => {
-    console.log("STEP 1 REACHED")
+    console.log('STEP 1 REACHED')
     const formData = new FormData()
 
     // 1. Find CSV
@@ -197,8 +206,8 @@ export default function AdminDashboard () {
     console.log('CSV TEXT:', csvText)
 
     // 5. Send to backend
-    console.log("🔥 ABOUT TO UPLOAD TO BACKEND")
-    console.log("STEP 2 ABOUT TO FETCH")
+    console.log('🔥 ABOUT TO UPLOAD TO BACKEND')
+    console.log('STEP 2 ABOUT TO FETCH')
     await fetch('http://localhost:5000/api/admin/sync', {
       method: 'POST',
       body: formData
@@ -580,6 +589,17 @@ export default function AdminDashboard () {
                       {/* 1. Type */}
                       <td className='p-4 text-xs uppercase font-bold text-gray-400'>
                         {item.type}
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            item.type === 'YouTube'
+                              ? 'text-red-400'
+                              : 'text-emerald-400'
+                          }
+                        >
+                          {item.type}
+                        </span>
                       </td>
 
                       {/* 2. Title */}

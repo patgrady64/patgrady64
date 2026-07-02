@@ -148,7 +148,7 @@ export default function ProjectCard ({ project }) {
                   Tech Stack
                 </h5>
 
-                <p className='text-emerald-400 text-base mt-1'>
+                <div className='text-emerald-400 text-base mt-1'>
                   <div className='flex flex-wrap justify-center gap-2 mt-1'>
                     {project.tech_stack?.map((tech, i) => (
                       <span
@@ -159,7 +159,7 @@ export default function ProjectCard ({ project }) {
                       </span>
                     ))}
                   </div>
-                </p>
+                </div>
               </div>
 
               <div className='flex flex-col items-center text-center'>
