@@ -1,86 +1,86 @@
-import React, { useState, useEffect } from 'react'
-import { Routes, Route, Link } from 'react-router-dom'
-import { Tv, Code } from 'lucide-react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, Link } from 'react-router-dom';
+import { Tv, Code } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faGithub,
   faLinkedin,
-  faYoutube
-} from '@fortawesome/free-brands-svg-icons'
+  faYoutube,
+} from '@fortawesome/free-brands-svg-icons';
 
-import AdminDashboard from './pages/AdminDashboard'
-import ProjectGallery from './pages/ProjectGallery'
+import AdminDashboard from './pages/AdminDashboard';
+import ProjectGallery from './pages/ProjectGallery';
 
-function App () {
-  const API_URL = import.meta.env.VITE_API_URL || ''
+function App() {
+  const API_URL = import.meta.env.VITE_API_URL || '';
 
-  const [projects, setProjects] = useState([])
-  const [youtubeVideos, setYoutubeVideos] = useState([])
-  const [selectedVideo, setSelectedVideo] = useState(null)
-  const [projectsLoading, setProjectsLoading] = useState(true)
-  const [videosLoading, setVideosLoading] = useState(true)
+  const [projects, setProjects] = useState([]);
+  const [youtubeVideos, setYoutubeVideos] = useState([]);
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [videosLoading, setVideosLoading] = useState(true);
 
   useEffect(() => {
     const loadProjects = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/projects`)
-        const json = await res.json()
+        const res = await fetch(`${API_URL}/api/projects`);
+        const json = await res.json();
 
         const list = Array.isArray(json)
           ? json
           : Array.isArray(json.data)
-          ? json.data
-          : []
+            ? json.data
+            : [];
 
-        setProjects(list)
+        setProjects(list);
       } catch (err) {
-        console.error('Error fetching projects:', err)
-        setProjects([])
+        console.error('Error fetching projects:', err);
+        setProjects([]);
       } finally {
-        setProjectsLoading(false)
+        setProjectsLoading(false);
       }
-    }
+    };
 
-    loadProjects()
-  }, [API_URL])
+    loadProjects();
+  }, [API_URL]);
 
   useEffect(() => {
     const loadVideos = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/youtube`)
-        const data = await res.json()
-        setYoutubeVideos(Array.isArray(data) ? data : [])
+        const res = await fetch(`${API_URL}/api/youtube`);
+        const data = await res.json();
+        setYoutubeVideos(Array.isArray(data) ? data : []);
 
         if (data && data.length > 0) {
-          setSelectedVideo(data[0])
+          setSelectedVideo(data[0]);
         }
       } catch (err) {
-        console.error('Error fetching YouTube videos:', err)
+        console.error('Error fetching YouTube videos:', err);
       } finally {
-        setVideosLoading(false)
+        setVideosLoading(false);
       }
-    }
-    loadVideos()
-  }, [API_URL])
+    };
+    loadVideos();
+  }, [API_URL]);
 
-  const getThumbnail = video =>
+  const getThumbnail = (video) =>
     video.youtube_url
       ? `https://img.youtube.com/vi/${extractId(
-          video.youtube_url
+          video.youtube_url,
         )}/hqdefault.jpg`
-      : ''
+      : '';
 
-  const extractId = url => {
-    if (!url) return ''
-    const match = url.match(/v=([^&]+)/)
-    return match?.[1] || ''
-  }
+  const extractId = (url) => {
+    if (!url) return '';
+    const match = url.match(/v=([^&]+)/);
+    return match?.[1] || '';
+  };
 
-  const activeVideo = selectedVideo || youtubeVideos[0]
+  const activeVideo = selectedVideo || youtubeVideos[0];
 
   const sortedVideos = [...youtubeVideos].sort((a, b) => {
-    return new Date(b.video_date) - new Date(a.video_date)
-  })
+    return new Date(b.video_date) - new Date(a.video_date);
+  });
 
   return (
     <Routes>
@@ -136,8 +136,7 @@ function App () {
                       href='https://github.com/patgrady64'
                       target='_blank'
                       rel='noreferrer'
-                      className='flex items-center gap-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-700 hover:border-gray-600 shadow-md transition-all duration-200'
-                    >
+                      className='flex items-center gap-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-700 hover:border-gray-600 shadow-md transition-all duration-200'>
                       <FontAwesomeIcon icon={faGithub} className='text-lg' />{' '}
                       GitHub Profile
                     </a>
@@ -145,8 +144,7 @@ function App () {
                       href='https://www.linkedin.com/in/patgrady64/'
                       target='_blank'
                       rel='noreferrer'
-                      className='flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-200 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-800 hover:border-gray-700 transition-all duration-200'
-                    >
+                      className='flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-200 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-800 hover:border-gray-700 transition-all duration-200'>
                       <FontAwesomeIcon
                         icon={faLinkedin}
                         className='text-lg text-blue-400'
@@ -157,8 +155,7 @@ function App () {
                       href='https://www.youtube.com/@iminvisibl2u'
                       target='_blank'
                       rel='noreferrer'
-                      className='flex items-center gap-2.5 bg-red-950/20 hover:bg-red-900/30 text-red-400 hover:text-red-300 font-medium text-sm px-4 py-2.5 rounded-xl border border-red-900/30 hover:border-red-700/50 transition-all duration-200'
-                    >
+                      className='flex items-center gap-2.5 bg-red-950/20 hover:bg-red-900/30 text-red-400 hover:text-red-300 font-medium text-sm px-4 py-2.5 rounded-xl border border-red-900/30 hover:border-red-700/50 transition-all duration-200'>
                       <FontAwesomeIcon icon={faYoutube} className='text-lg' />{' '}
                       YouTube Channel
                     </a>
@@ -197,8 +194,7 @@ function App () {
                       <span className='text-gray-600'>Console Pipeline:</span>
                       <Link
                         to='/admin'
-                        className='text-gray-500 hover:text-emerald-400 transition-colors duration-150'
-                      >
+                        className='text-gray-500 hover:text-emerald-400 transition-colors duration-150'>
                         Open Admin →
                       </Link>
                     </li>
@@ -239,36 +235,33 @@ function App () {
                   {/* ROW 1 */}
                   <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
                     {/* Thumbnail */}
-                    <div className='aspect-video rounded-xl overflow-hidden bg-gray-950 border border-gray-900 shadow-inner relative'>
+                    <div
+                      className='aspect-video rounded-xl overflow-hidden bg-gray-950 border border-gray-900 shadow-inner relative cursor-pointer'
+                      onClick={() => setSelectedVideo(activeVideo)}>
+                      {' '}
                       <img
                         src={
                           activeVideo?.youtube_url
                             ? `https://img.youtube.com/vi/${extractId(
-                                activeVideo.youtube_url
+                                activeVideo.youtube_url,
                               )}/hqdefault.jpg`
                             : null
                         }
                         className='w-full h-full object-cover'
                         alt={activeVideo?.title}
                       />
-
-                      <div className='absolute inset-0 bg-black/40' />
-
-                      <a
-                        href={activeVideo?.youtube_url}
-                        target='_blank'
-                        rel='noreferrer'
-                        className='absolute inset-0'
-                      />
-
                       <div className='absolute inset-0 flex items-center justify-center'>
-                        <div className='bg-red-600 text-white px-6 py-3 rounded-full font-bold'>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(activeVideo?.youtube_url, '_blank');
+                          }}
+                          className='bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-full font-bold shadow-lg transition'>
                           ▶ Play
-                        </div>
+                        </button>
                       </div>
                     </div>
-
-                    {/* Description Panel */}
+                    {/* Description Panel */}{' '}
                     <div className='bg-gray-900 border border-gray-800 rounded-xl p-4'>
                       <h3 className='text-white font-bold text-lg mb-2'>
                         {activeVideo?.title}
@@ -295,7 +288,7 @@ function App () {
                       </thead>
 
                       <tbody>
-                        {sortedVideos.map(video => (
+                        {sortedVideos.map((video) => (
                           <tr
                             key={video.id}
                             onClick={() => setSelectedVideo(video)}
@@ -303,11 +296,19 @@ function App () {
                               selectedVideo?.id === video.id
                                 ? 'bg-gray-800'
                                 : ''
-                            }`}
-                          >
+                            }`}>
                             <td className='px-3 py-2 text-white font-medium'>
-                              {video.title}
+                              <div className='flex items-center gap-2'>
+                                {video.title}
+
+                                {selectedVideo?.id === video.id && (
+                                  <span className='text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold tracking-wide animate-pulse'>
+                                    NOW PLAYING
+                                  </span>
+                                )}
+                              </div>
                             </td>
+
                             <td className='px-3 py-2 text-white font-medium'>
                               {video.game}
                             </td>
@@ -340,7 +341,7 @@ function App () {
         }
       />
     </Routes>
-  )
+  );
 }
 
-export default App
+export default App;

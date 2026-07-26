@@ -7,6 +7,47 @@ from werkzeug.utils import secure_filename
 from supabase import create_client, Client
 from flask_cors import CORS
 from dotenv import load_dotenv
+import mimetypes
+
+REQUIRED_FIELDS = {
+    "Project": ["title", "description", "project_type", "tech_stack", "architecture_tags", "github_url", "screenshot_urls", "download_url", "gif_url", "dev_notes"],
+    "YouTube": ["title", "game", "description", "video_date", "youtube_url"],
+}
+
+ALLOWED_COLUMNS = {
+    "id",
+    "type",
+    "title",
+    "description",
+    "project_type",
+    "tech_stack",
+    "architecture_tags",
+    "github_url",
+    "live_url",
+    "download_url",
+    "gif_url",
+    "screenshot_urls",
+    "dev_notes",
+    "video_date",
+    "youtube_url",
+    "game"
+}
+
+def check_integrity(item):
+    item_type = item.get("type", "Project")
+    requirements = REQUIRED_FIELDS.get(item_type, [])
+    missing = []
+
+    requirements = REQUIRED_FIELDS.get(item_type, [])
+
+    for field in requirements:
+        if not item.get(field):
+            missing.append(field)
+
+    if missing:
+        return "Missing: " + ", ".join(missing)
+
+    return "Ready"
 
 def get_supabase_columns():
     try:
@@ -32,64 +73,46 @@ def get_supabase_columns():
     except Exception as e:
         print("Schema fetch failed:", e)
         return set()
-        return set()
 
 # 1. SETUP
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '.env'))
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}}, methods=["GET", "POST", "DELETE", "OPTIONS"])
 
 # 2. INITIALIZE CLIENT
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+sync_progress = {"status": "Idle", "percent": 0}
 
 # 3. HELPER FUNCTIONS
-def parse_project_csv(csv_text_content):
-    csv_file = io.StringIO(csv_text_content)
-    reader = csv.DictReader(csv_file)
-    for row in reader:
-        clean_row = {k.strip(): v.strip() for k, v in row.items() if k and v}
-        clean_row['tech_stack'] = [t.strip() for t in clean_row.get('tech_stack', '').split(';') if t.strip()]
-        clean_row['architecture_tags'] = [t.strip() for t in clean_row.get('architecture_tags', '').split(';') if
-                                          t.strip()]
-        clean_row['screenshots'] = [s.strip() for s in clean_row.get('screenshots', '').split(';') if s.strip()]
-        return clean_row
-    return None
-
-
 def upload_asset(file_key, folder, filename, project_title):
-    # Check if the specific generic key exists, OR if the actual filename exists as a key
-    actual_key = file_key if file_key in request.files else filename
+    if file_key not in request.files:
+        print(f"Missing file key: {file_key}")
+        return None
 
-    print(f"DEBUG: Checking for file_key: '{file_key}' or filename: '{filename}'")
+    file_obj = request.files[file_key]
+    file_obj.seek(0)
 
-    if actual_key in request.files:
-        file_obj = request.files[actual_key]
-        file_obj.seek(0)
+    path = f"{folder}/{secure_filename(project_title)}/{secure_filename(filename)}"
 
-        path = f"{folder}/{secure_filename(project_title)}/{secure_filename(filename)}"
+    try:
+        supabase.storage.from_("portfolio-assets").upload(
+            path=path,
+            file=file_obj,
+            file_options={"contentType": "application/octet-stream"}
+        )
+    except Exception as e:
+        if '409' in str(e):
+            print(f"Already exists: {filename}")
+        else:
+            print(f"Upload failed: {e}")
+            return None
 
-        try:
-            supabase.storage.from_("portfolio-assets").upload(
-                path=path,
-                file=file_obj.read(),
-                file_options={"contentType": "application/octet-stream"}
-            )
-        except Exception as e:
-            if '409' in str(e):
-                print(f"INFO: {filename} already exists, skipping upload.")
-            else:
-                print(f"PIPELINE ERROR: Upload failed for {path}: {e}")
-                return None
-
-        return supabase.storage.from_("portfolio-assets").get_public_url(path)
-
-    print(f"PIPELINE ERROR: Could not find file key '{file_key}' or '{filename}'")
-    return None
+    return supabase.storage.from_("portfolio-assets").get_public_url(path)
 
 def safe_upload(file_key, folder, default_filename, project_title):
     if file_key not in request.files:
@@ -101,9 +124,16 @@ def safe_upload(file_key, folder, default_filename, project_title):
 
     return upload_asset(file_key, folder, default_filename, project_title)
 
+
 def sanitize_for_supabase(data: dict):
-    allowed = get_supabase_columns()
-    return {k: v for k, v in data.items() if k in allowed}
+    # 1. First, filter only the allowed columns
+    clean_data = {k: v for k, v in data.items() if k in ALLOWED_COLUMNS}
+
+    # 2. Convert semicolon-delimited strings to Postgres Array format
+    # This handles both 'tech_stack' and 'architecture_tags'
+
+
+    return clean_data
 
 
 # 4. API ROUTES
@@ -116,83 +146,233 @@ def get_projects():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/admin/sync-project', methods=['POST'])
-def sync_project_pipeline():
+# app.py
+
+@app.route('/api/admin/sync', methods=['POST'])
+def sync_dispatcher():
+    print("FORM KEYS:", request.form.keys())
+    print("FILES:", request.files.keys())
+    print("🔥 HIT /api/admin/sync")
+
     try:
-        print("DEBUG: Request files received:", list(request.files.keys()))
-        for key in request.files:
-            print(f"DEBUG: Found key: '{key}' | Filename: '{request.files[key].filename}'")
+        # 1. Parse CSV content
+        csv_text = request.form.get('manifest')
+        print("MANIFEST LENGTH:", len(csv_text) if csv_text else None)
+        if not csv_text:
+            return jsonify({"error": "Missing manifest"}), 400
+        # We need a quick way to get the 'type' without full parsing
+        reader = csv.DictReader(io.StringIO(csv_text))
+        first_row = next(reader, None)
 
-        pipeline_state = {
-            "files_uploaded": [],
-            "db_written": False
-        }
-        if 'info_csv' not in request.files:
-            return jsonify({"error": "Missing info.csv"}), 400
+        if not first_row:
+            return jsonify({"error": "CSV is empty"}), 400
 
-        # 1. Parse CSV
-        project_data = parse_project_csv(request.files['info_csv'].read().decode('utf-8'))
+        item_type = first_row.get("type", "")
+        item_type = item_type.encode("utf-8").decode("utf-8-sig").strip()
 
-        # 2. Extract and preserve filenames BEFORE cleaning
-        binary_filename = project_data.get("binary_filename")
-        gif_filename = project_data.get("gif_filename")
-        screenshots = project_data.get("screenshots", [])
+        print("RAW FIRST ROW:", first_row)
+        print("RAW TYPE:", repr(item_type))
 
-        # 3. Clean the project data for Supabase
-        project_data.pop("screenshots", None)  # Don't need this in the DB row
-        clean_project_data = sanitize_for_supabase(project_data)
-
-        title = project_data.get('title', 'project')
-
-        # 4. Upload Assets
-        d_url = upload_asset('binary_filename', 'installers', binary_filename or 'app.apk', title)
-        if d_url:
-            pipeline_state["files_uploaded"].append(d_url)
-
-        g_url = upload_asset('gif_filename', 'visuals', gif_filename or 'demo.gif', title)
-        if g_url:
-            pipeline_state["files_uploaded"].append(g_url)
-
-        s_urls = []
-        for shot in screenshots:
-            if shot and shot in request.files:
-                url = upload_asset(shot, 'screenshots', shot, title)
-                if url:
-                    pipeline_state["files_uploaded"].append(url)
-                    s_urls.append(url)
-
-        # 5. Sync to DB - Include the filenames here!
-        supabase.table("projects").upsert({
-            **clean_project_data,
-            "binary_filename": binary_filename,
-            "gif_filename": gif_filename,
-            "dev_notes": project_data.get('dev_notes'),
-            "download_url": d_url or "",
-            "gif_url": g_url or "",
-            "screenshot_urls": s_urls
-        }, on_conflict="title").execute()
-
-        pipeline_state["db_written"] = True
-        return jsonify({"status": "success"}), 200
+        if item_type == "Project":
+            return handle_project_sync(first_row)
+        elif item_type == "YouTube":
+            return handle_youtube_sync(first_row)
+        else:
+            return jsonify({"error": f"Unknown type: {item_type}"}), 400
 
     except Exception as e:
-        traceback.print_exc()
-        # Rollback logic remains the same...
-        if not pipeline_state["db_written"]:
-            for url in pipeline_state["files_uploaded"]:
-                try:
-                    path = url.split("/storage/v1/object/public/portfolio-assets/")[-1]
-                    supabase.storage.from_("portfolio-assets").remove([path])
-                except Exception:
-                    pass
         return jsonify({"error": str(e)}), 500
 
+def handle_project_sync(data):
+        try:
+            # 0. Initialize Pipeline State
+            update_status("Starting ingestion...", 0)
+
+            # 1. Parse CSV
+            update_status("Parsing manifest...", 10)
+
+            manifest_data = {
+                "title": data["title"],
+                "type": data["type"],
+                "binary_filename": data["binary_filename"],
+                "gif_filename": data["gif_filename"],
+                "screenshots": data["screenshots"]
+            }
+
+            title = manifest_data["title"]
+            binary_file = manifest_data["binary_filename"]
+            gif_file = manifest_data["gif_filename"]
+            screenshots = [s.strip() for s in manifest_data["screenshots"].split(";") if s.strip()]
+            manifest_data["screenshots"] = screenshots
+
+            expected_files = set()
+            if binary_file:
+                expected_files.add(os.path.basename(binary_file))
+            if gif_file:
+                expected_files.add(os.path.basename(gif_file))
+            expected_files.update(
+                os.path.basename(s) for s in screenshots
+            )
+
+            # 2. Prepare Files for Upload Loop
+            files = request.files.getlist("files")
+            uploaded_files = {os.path.basename(file.filename) for file in files}
+            print("EXPECTED FILES:", expected_files)
+            print("UPLOADED FILES:", uploaded_files)
+            is_valid, errors = validate_manifest(expected_files, uploaded_files)
+
+            if not is_valid:
+                return jsonify({
+                    "error": "Manifest validation failed",
+                    "details": errors
+                }), 400
+
+            # 3. Upload Loop with Progress Tracking
+            urls = {"d_url": None, "g_url": None, "s_urls": []}
+
+            screenshots = [os.path.basename(s) for s in screenshots]
+
+            # 3. Upload Loop with Progress Tracking
+            for file in files:
+                filename = os.path.basename(file.filename)
+                file.seek(0)
+
+                # Binary match
+                if filename == os.path.basename(binary_file):
+                    url = upload_asset_manually(file, "installers", filename, title)
+                    urls["d_url"] = url
+
+                # GIF match
+                elif filename == os.path.basename(gif_file):
+                    url = upload_asset_manually(file, "demos", filename, title)
+                    urls["g_url"] = url
+
+                # Screenshot match
+                elif filename in [os.path.basename(s) for s in screenshots]:
+                    url = upload_asset_manually(file, "screenshots", filename, title)
+                    urls["s_urls"].append(url)
+
+                else:
+                    print(f"⚠️ Unrecognized file ignored: {filename}")
+
+            # 4. Sync to DB
+            update_status("Finalizing database entry...", 80)
+
+            # clean_project_data = sanitize_for_supabase(data)
+
+            def to_array(value):
+                if not value:
+                    return []
+                return [v.strip() for v in value.split(";") if v.strip()]
+
+            clean_project_data = {
+                "type": data["type"],
+                "title": data["title"],
+                "description": data["description"],
+                "project_type": data["project_type"],
+                "tech_stack": to_array(data.get("tech_stack")),
+                "architecture_tags": to_array(data.get("architecture_tags")),
+                "github_url": data["github_url"],
+                "live_url": data.get("live_url", ""),
+                "dev_notes": data["dev_notes"],
+            }
+
+            urls["s_urls"] = [u for u in urls["s_urls"] if u]
+
+            print("UPSERT PAYLOAD:", {
+                **clean_project_data,
+                "download_url": urls["d_url"] or "",
+                "gif_url": urls["g_url"] or "",
+                "screenshot_urls": urls["s_urls"]
+            })
+
+            supabase.table("projects").upsert({
+                **clean_project_data,
+                "download_url": urls["d_url"] or "",
+                "gif_url": urls["g_url"] or "",
+                "screenshot_urls": urls["s_urls"]
+            }, on_conflict="title").execute()
+
+            update_status("Complete!", 100)
+            return jsonify({"status": "success"}), 200
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            # Cleanup on failure
+            return jsonify({"error": str(e)}), 500
+
+
+def validate_manifest(expected_files, uploaded_files):
+    missing = list(expected_files - uploaded_files)
+    extra = list(uploaded_files - expected_files - {"info.csv"})
+
+    errors = []
+
+    if missing:
+        errors.append(f"Missing files: {missing}")
+
+    # optional strict mode (you can disable later)
+    if extra:
+        errors.append(f"Unexpected files: {extra}")
+
+    if errors:
+        return False, errors
+
+    return True, None
+
+import mimetypes
+
+
+def upload_asset_manually(file_obj, folder, filename, project_title):
+    # 1. Read the bytes from the FileStorage object
+    file_bytes = file_obj.read()
+
+    # 2. Detect the MIME type (as we discussed previously)
+    content_type, _ = mimetypes.guess_type(filename)
+    if not content_type:
+        content_type = 'application/octet-stream'
+
+    path = f"{folder}/{secure_filename(project_title)}/{secure_filename(filename)}"
+
+    # 3. Pass the bytes directly to the 'file' argument
+    supabase.storage.from_("portfolio-assets").upload(
+        path=path,
+        file=file_bytes,  # <--- Pass the bytes, not the object
+        file_options={"contentType": content_type}
+    )
+
+    return supabase.storage.from_("portfolio-assets").get_public_url(path)
+
+
+def handle_youtube_sync(data):
+    try:
+        update_status("Processing YouTube metadata...", 50)
+
+        # Sanitize data: Ensure date is in YYYY-MM-DD if needed
+        # Note: If your Supabase column is strictly 'date',
+        # ensure data.get('video_date') is a valid ISO string.
+
+        supabase.table("youtube_videos").upsert({
+            "title": data.get('title'),
+            "game": data.get('game'),
+            "description": data.get('description'),
+            "video_date": data.get('video_date'),
+            "youtube_url": data.get('youtube_url')
+        }, on_conflict="title").execute()
+
+        update_status("YouTube entry synchronized.", 100)
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        import traceback
+        traceback.print_exc()  # Keep this for debugging!
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/check-assets/<project_title>', methods=['GET'])
 def check_assets(project_title):
     try:
         # Construct paths for the folders where we store these assets
-        folders = ['installers', 'visuals', 'screenshots']
+        folders = ['installers', 'demos', 'screenshots']
         found_files = []
 
         for folder in folders:
@@ -212,41 +392,133 @@ def check_assets(project_title):
 @app.route('/api/admin/check-all-assets')
 def check_all_assets():
     try:
-        files = []
-
-        folders = [
-            "installers",
-            "visuals",
-            "screenshots"
-        ]
-
+        projects = supabase.table("projects").select("*").execute().data
         bucket = supabase.storage.from_("portfolio-assets")
+        folders = ["installers", "demos", "screenshots"]
 
-        for root_folder in folders:
+        results = []
+        for p in projects:
+            # 1. Calculate Status
+            status = check_integrity(p)
 
-            # Get project folders (PicRoulette, Beacon, etc.)
-            project_folders = bucket.list(root_folder)
+            # 2. Add Storage Integrity Check
+            if status == "Ready":
+                for folder in folders:
+                    path = f"{folder}/{secure_filename(p.get('title', ''))}"
+                    if not bucket.list(path=path):
+                        status = f"Missing files in {folder}"
+                        break
 
-            for project in project_folders:
-                project_name = project["name"]
-
-                # Go inside:
-                # installers/PicRoulette
-                path = f"{root_folder}/{project_name}"
-
-                inner_files = bucket.list(path)
-
-                for item in inner_files:
-                    files.append({
-                        "folder": root_folder,
-                        "project": project_name,
-                        "name": item["name"]
-                    })
-
-        return jsonify(files)
-
+            # 3. Construct Unified Response
+            results.append({
+                "id": p.get("id"),
+                "type": p.get("type", "Project"),
+                "title": p.get("title"),
+                "status": status,
+                "metadata": {
+                    "tech": p.get("tech_stack"),
+                    "platform": p.get("platform"),
+                    "isbn": p.get("isbn"),
+                    "url": p.get("youtube_url")
+                }
+            })
+        return jsonify(results)
     except Exception as e:
         traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/sync-status', methods=['GET'])
+def get_sync_status():
+    return jsonify(sync_progress)
+
+def update_status(message, percent):
+    sync_progress.update({"status": message, "percent": percent})
+
+
+@app.route('/api/admin/delete/<id>', methods=['DELETE', 'OPTIONS'])
+def delete_project(id):
+    if request.method == 'OPTIONS':
+        return '', 200  # Explicitly handle preflight
+
+    try:
+        # Reset progress tracker
+        sync_progress.update({"status": "Deleting assets...", "percent": 25})
+
+        # 1. Fetch the record
+        response = supabase.table("projects").select("*").eq("id", id).single().execute()
+        project = response.data
+        if not project: return jsonify({"error": "Not found"}), 404
+
+        sync_progress.update({"status": "Removing storage files...", "percent": 50})
+
+        # 2. Identify and remove files
+        project_title = secure_filename(project.get('title', ''))
+        folders = ['installers', 'demos', 'screenshots']
+        for folder in folders:
+            path = f"{folder}/{project_title}"
+            files = supabase.storage.from_("portfolio-assets").list(path=path)
+            for file in files:
+                supabase.storage.from_("portfolio-assets").remove([f"{path}/{file['name']}"])
+
+        sync_progress.update({"status": "Cleaning database...", "percent": 75})
+
+        # 3. Delete from DB
+        supabase.table("projects").delete().eq("id", id).execute()
+
+        sync_progress.update({"status": "Done", "percent": 100})
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        sync_progress.update({"status": "Error", "percent": 0})
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/youtube', methods=['GET'])
+def get_youtube_videos():
+    # Fetch all records from the youtube_videos table
+    response = supabase.table("youtube_videos").select("*").execute()
+    return jsonify(response.data)
+
+@app.route('/api/admin/registry', methods=['GET'])
+def get_registry():
+    try:
+        projects = supabase.table("projects").select("*").execute().data
+        youtube = supabase.table("youtube_videos").select("*").execute().data
+
+        unified = []
+
+        # Projects
+        for p in projects:
+            unified.append({
+                "id": p["id"],
+                "type": "Project",
+                "title": p.get("title"),
+                "created_at": p.get("created_at"),
+                "metadata": {
+                    "tech": p.get("tech_stack")
+                }
+            })
+
+        # YouTube
+        for v in youtube:
+            unified.append({
+                "id": v["id"],
+                "type": "YouTube",
+                "game": v["game"],
+                "title": v.get("title"),
+                "created_at": v.get("created_at"),
+                "metadata": {
+                    "url": v.get("youtube_url")
+                }
+            })
+
+        # Sort newest first
+        unified.sort(
+            key=lambda x: x.get("created_at") or "",
+            reverse=True
+        )
+
+        return jsonify(unified)
+
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
