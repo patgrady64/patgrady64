@@ -208,7 +208,7 @@ export default function AdminDashboard () {
     // 5. Send to backend
     console.log('🔥 ABOUT TO UPLOAD TO BACKEND')
     console.log('STEP 2 ABOUT TO FETCH')
-    await fetch('http://localhost:5000/api/admin/sync', {
+    await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin/sync`, {
       method: 'POST',
       body: formData
     })

@@ -1,228 +1,145 @@
-import React, { useState } from 'react'
-import ProjectCarousel from './ProjectCarousel'
-import Modal from './Modal'
-import './ProjectCard.css'
+import { useMemo, useState } from 'react';
+import {
+  ArrowUpRight,
+  BookOpen,
+  Boxes,
+  Code2,
+  Download,
+  ExternalLink,
+  Gamepad2,
+  Github,
+  Image as ImageIcon,
+  Wrench,
+  X,
+} from 'lucide-react';
 
-export default function ProjectCard ({ project }) {
-  
-  const screenshots = Array.isArray(project.screenshot_urls)
-    ? project.screenshot_urls
-    : typeof project.screenshot_urls === 'string'
-    ? project.screenshot_urls.split(';').filter(Boolean)
-    : []
+const CATEGORY_ICONS = {
+  software: Code2,
+  systems: Boxes,
+  games: Gamepad2,
+  books: BookOpen,
+  tools: Wrench,
+};
 
-  const [isFlipped, setIsFlipped] = useState(false)
-
-  const [activeImage, setActiveImage] = useState(screenshots[0])
-  const [modal, setModal] = useState({
-    isOpen: false,
-    title: '',
-    content: '',
-    type: 'text'
-  })
-
-  const openModal = (e, title, content, type = 'text') => {
-    if (e) e.stopPropagation()
-    setModal({ isOpen: true, title, content, type })
+function normalizeList(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === 'string') {
+    return value.split(/[;,]/).map((item) => item.trim()).filter(Boolean);
   }
+  return [];
+}
+
+function getActionLabel(category, project) {
+  if (category === 'books') return project.live_url ? 'View book' : 'Download';
+  if (category === 'games') return project.live_url ? 'Play / view' : 'Download';
+  if (category === 'systems') return project.live_url ? 'View system' : 'Download';
+  return project.live_url ? 'Open project' : 'Download';
+}
+
+export default function ProjectCard({ project, categoryDefinitions = [] }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const screenshots = useMemo(() => normalizeList(project.screenshot_urls), [project.screenshot_urls]);
+  const techStack = useMemo(() => normalizeList(project.tech_stack), [project.tech_stack]);
+  const tags = useMemo(() => normalizeList(project.architecture_tags), [project.architecture_tags]);
+  const category = project._category || 'software';
+  const definition = categoryDefinitions.find((item) => item.id === category);
+  const CategoryIcon = CATEGORY_ICONS[category] || Code2;
+  const primaryImage = screenshots[0] || project.gif_url || '';
+  const primaryUrl = project.live_url || project.download_url || '';
 
   return (
     <>
-      {/* CARD WRAPPER */}
-      <div
-        className='perspective-1000 w-full max-w-[450px] h-[600px] mx-auto'
-        onClick={() => setIsFlipped(prev => !prev)}
-      >
-        <div
-          className={`flip-card-inner w-full h-full transition-transform duration-700 preserve-3d ${
-            isFlipped ? 'rotate-y-180' : ''
-          }`}
-        >
-          {/* ================= FRONT ================= */}
-          <div className='absolute inset-0 backface-hidden bg-gray-900 border border-gray-800 rounded-3xl shadow-xl flex flex-col overflow-hidden'>
-            <div className='pt-2 pb-3 px-5 flex-shrink-0 text-center border-b border-gray-800'>
-              <p className='text-[10px] uppercase tracking-[0.3em] text-emerald-500 mb-2'>
-                Click Card to Flip
-              </p>
-
-              <h2 className='text-[2rem] font-black gradient-text tracking-wide'>
-                {project.title}
-              </h2>
+      <article className='project-card'>
+        <div className={`project-visual project-visual-${category}`}>
+          {primaryImage ? (
+            <img src={primaryImage} alt={`${project.title} preview`} loading='lazy' />
+          ) : (
+            <div className='project-placeholder' aria-hidden='true'>
+              <CategoryIcon size={42} />
+              <span>PGDevHouse</span>
             </div>
+          )}
+          <div className='project-visual-shade' />
+          <span className='category-badge'><CategoryIcon size={14} /> {definition?.label || project.project_type || 'Project'}</span>
+          {screenshots.length > 1 && <span className='image-count'><ImageIcon size={13} /> {screenshots.length}</span>}
+        </div>
 
-            {/* CAROUSEL */}
-            <div className='px-5 mt-3 flex-shrink-0'>
-              <div
-                className='h-48 bg-gray-950 rounded-lg overflow-hidden border border-gray-700'
-                onClick={e => {
-                  e.stopPropagation()
-                  openModal(e, project.title, activeImage, 'image')
-                }}
-              >
-                <ProjectCarousel
-                  images={screenshots}
-                  onImageChange={setActiveImage}
-                />
-              </div>
+        <div className='project-card-body'>
+          <div className='project-title-row'>
+            <div>
+              {project.project_type && <span className='project-type'>{project.project_type}</span>}
+              <h3>{project.title}</h3>
             </div>
-
-            {/* DESCRIPTION */}
-            <div className='px-5 flex-1 flex flex-col justify-center'>
-              <h5 className='text-emerald-300 text-sm font-bold uppercase text-center tracking-wider'>
-                Description
-              </h5>
-
-              <p className='text-gray-300 text-base leading-relaxed clamp-4 text-center'>
-                {project.description}
-              </p>
-
-              <div className='mt-5 flex justify-center'>
-                <button
-                  onClick={e => {
-                    e.stopPropagation()
-                    openModal(e, project.title, project.description)
-                  }}
-                  className='text-emerald-400 text-sm underline hover:text-emerald-300 transition'
-                >
-                  Read Full Description
-                </button>
-              </div>
-            </div>
-
-            {/* FOOTER */}
-            <div className='px-5 pb-5 pt-3 border-t border-gray-800 flex-shrink-0 mt-auto'>
-              <a
-                href={project.download_url}
-                download
-                onClick={e => e.stopPropagation()}
-                className='block w-full py-3 bg-emerald-600 rounded-xl font-bold text-center hover:bg-emerald-500'
-              >
-                Download App
-              </a>
-            </div>
+            <button className='details-icon-button' type='button' onClick={() => setDetailsOpen(true)} aria-label={`View details for ${project.title}`}>
+              <ArrowUpRight size={19} />
+            </button>
           </div>
 
-          {/* ================= BACK ================= */}
-          <div className='absolute inset-0 backface-hidden rotate-y-180 bg-gray-800 border border-emerald-500/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden'>
-            <div className='pt-2 pb-3 px-5 flex-shrink-0 text-center border-b border-gray-800'>
-              <p className='text-[10px] uppercase tracking-[0.3em] text-emerald-500 mb-2'>
-                Click Card to Flip
-              </p>
+          <p className='project-description'>{project.description}</p>
 
-              <h2 className='text-[2rem] font-black gradient-text tracking-wide'>
-                {project.title}
-              </h2>
+          {(techStack.length > 0 || tags.length > 0) && (
+            <div className='tag-list'>
+              {[...techStack, ...tags].slice(0, 5).map((tag, index) => <span key={`${tag}-${index}`}>{tag}</span>)}
             </div>
+          )}
 
-            {/* GIF */}
-            <div
-              className='h-32 bg-gray-950 rounded-lg overflow-hidden border border-gray-800'
-              onClick={e => {
-                e.stopPropagation()
-                // Add a check to ensure gif_url exists before opening the modal
-                if (project.gif_url)
-                  openModal(e, 'Demo', project.gif_url, 'image')
-              }}
-            >
-              {project.gif_url ? (
-                <img
-                  src={project.gif_url}
-                  alt='Demo'
-                  className='w-full h-full object-contain'
-                  onError={e => {
-                    e.target.style.display = 'none'
-                    console.error('GIF failed to load:', project.gif_url)
-                  }}
-                />
-              ) : (
-                <div className='flex items-center justify-center h-full text-gray-600 text-xs'>
-                  No GIF
-                </div>
-              )}
-            </div>
-
-            {/* BODY */}
-            <div className='px-5 py-3 flex-1 space-y-3'>
-              <div className='flex flex-col items-center text-center'>
-                <h5 className='text-emerald-300 text-base font-bold uppercase tracking-wider mb-2'>
-                  Tech Stack
-                </h5>
-
-                <div className='text-emerald-400 text-base mt-1'>
-                  <div className='flex flex-wrap justify-center gap-2 mt-1'>
-                    {project.tech_stack?.map((tech, i) => (
-                      <span
-                        key={i}
-                        className='text-cyan-300 bg-cyan-400/10 border border-cyan-400/30 px-2 py-1 rounded-md text-sm shadow-[0_0_10px_rgba(34,211,238,0.15)]'
-                      >
-                        {tech}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className='flex flex-col items-center text-center'>
-                <h5 className='text-emerald-300 text-base font-bold uppercase tracking-wider mb-2'>
-                  DEVELOPER NOTES
-                </h5>
-
-                <p className='text-gray-200 text-base mt-1 leading-relaxed'>
-                  {project.dev_notes?.slice(0, 120)}...
-                </p>
-
-                <div className='flex justify-center mt-2'>
-                  <button
-                    onClick={e => {
-                      e.stopPropagation()
-                      openModal(e, 'Developer Notes', project.dev_notes)
-                    }}
-                    className='text-emerald-400 text-xs underline'
-                  >
-                    Read Full Notes
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* FOOTER */}
-            <div className='flex gap-2 w-full'>
-              <a
-                href={project.github_url}
-                onClick={e => e.stopPropagation()}
-                className='flex-1 text-center py-2 bg-gray-900 rounded-lg text-sm font-bold hover:bg-black'
-              >
-                GitHub
+          <div className='project-card-actions'>
+            {primaryUrl && (
+              <a className='project-action primary' href={primaryUrl} target={project.live_url ? '_blank' : undefined} rel={project.live_url ? 'noreferrer' : undefined}>
+                {project.live_url ? <ExternalLink size={15} /> : <Download size={15} />}
+                {getActionLabel(category, project)}
               </a>
+            )}
+            {project.github_url && (
+              <a className='project-action secondary' href={project.github_url} target='_blank' rel='noreferrer'>
+                <Github size={15} /> Code
+              </a>
+            )}
+            <button className='project-action ghost' type='button' onClick={() => setDetailsOpen(true)}>Details</button>
+          </div>
+        </div>
+      </article>
 
-              {project.live_url ? (
-                <a
-                  href={project.live_url}
-                  onClick={e => e.stopPropagation()}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  className='flex-1 text-center py-2 bg-purple-700 rounded-lg text-sm font-bold'
-                >
-                  Live
-                </a>
-              ) : (
-                <div className='flex-1 py-2 rounded-lg bg-gray-800 text-gray-500 text-sm font-bold text-center'>
-                  No Live Demo
-                </div>
-              )}
+      {detailsOpen && (
+        <div className='project-modal-backdrop' role='presentation' onMouseDown={() => setDetailsOpen(false)}>
+          <div className='project-modal' role='dialog' aria-modal='true' aria-label={`${project.title} details`} onMouseDown={(event) => event.stopPropagation()}>
+            <button className='modal-close' type='button' onClick={() => setDetailsOpen(false)} aria-label='Close project details'><X size={20} /></button>
+            <div className='modal-header'>
+              <span className='category-badge static-badge'><CategoryIcon size={14} /> {definition?.label || 'Project'}</span>
+              <h2>{project.title}</h2>
+              <p>{project.description}</p>
+            </div>
+
+            {screenshots.length > 0 && (
+              <div className='modal-gallery'>
+                {screenshots.slice(0, 4).map((image, index) => (
+                  <a href={image} target='_blank' rel='noreferrer' key={`${image}-${index}`}>
+                    <img src={image} alt={`${project.title} screenshot ${index + 1}`} />
+                  </a>
+                ))}
+              </div>
+            )}
+
+            <div className='modal-meta-grid'>
+              {techStack.length > 0 && <div><span>Built with</span><strong>{techStack.join(' · ')}</strong></div>}
+              {tags.length > 0 && <div><span>Focus</span><strong>{tags.join(' · ')}</strong></div>}
+            </div>
+
+            {project.dev_notes && (
+              <div className='modal-notes'>
+                <span>Behind the build</span>
+                <p>{project.dev_notes}</p>
+              </div>
+            )}
+
+            <div className='modal-actions'>
+              {project.live_url && <a className='button button-primary' href={project.live_url} target='_blank' rel='noreferrer'>Open project <ExternalLink size={17} /></a>}
+              {!project.live_url && project.download_url && <a className='button button-primary' href={project.download_url}>Download <Download size={17} /></a>}
+              {project.github_url && <a className='button button-secondary' href={project.github_url} target='_blank' rel='noreferrer'><Github size={17} /> View code</a>}
             </div>
           </div>
         </div>
-      </div>
-
-      {/* MODAL */}
-      <Modal
-        isOpen={modal.isOpen}
-        onClose={() => setModal(prev => ({ ...prev, isOpen: false }))}
-        title={modal.title}
-        content={modal.content}
-        type={modal.type}
-      />
+      )}
     </>
-  )
+  );
 }

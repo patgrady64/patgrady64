@@ -1,346 +1,452 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link } from 'react-router-dom';
-import { Tv, Code } from 'lucide-react';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  faGithub,
-  faLinkedin,
-  faYoutube,
-} from '@fortawesome/free-brands-svg-icons';
-
-import AdminDashboard from './pages/AdminDashboard';
+  ArrowRight,
+  BookOpen,
+  Boxes,
+  Code2,
+  ExternalLink,
+  Gamepad2,
+  Github,
+  Layers3,
+  Linkedin,
+  Menu,
+  Search,
+  Sparkles,
+  Wrench,
+  X,
+  Youtube,
+} from 'lucide-react';
 import ProjectGallery from './pages/ProjectGallery';
+import './App.css';
+
+const CATEGORY_DEFINITIONS = [
+  {
+    id: 'software',
+    label: 'Software',
+    shortLabel: 'Software',
+    icon: Code2,
+    description: 'Web, mobile, desktop, and full-stack applications.',
+  },
+  {
+    id: 'systems',
+    label: 'Systems & Products',
+    shortLabel: 'Systems',
+    icon: Boxes,
+    description: 'Larger product ecosystems, workflows, and packaged solutions.',
+  },
+  {
+    id: 'games',
+    label: 'Games',
+    shortLabel: 'Games',
+    icon: Gamepad2,
+    description: 'Original games, prototypes, and interactive experiments.',
+  },
+  {
+    id: 'books',
+    label: 'Books & Writing',
+    shortLabel: 'Books',
+    icon: BookOpen,
+    description: 'Fiction, nonfiction, workbooks, and long-form creative projects.',
+  },
+  {
+    id: 'tools',
+    label: 'Tools & Utilities',
+    shortLabel: 'Tools',
+    icon: Wrench,
+    description: 'Focused utilities that solve one annoying problem well.',
+  },
+];
+
+function normalizeList(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === 'string') {
+    return value
+      .split(/[;,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function getProjectCategory(project) {
+  const source = [
+    project?.project_type,
+    ...normalizeList(project?.architecture_tags),
+    ...normalizeList(project?.tech_stack),
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  if (/book|novel|writing|workbook|memoir|fiction|nonfiction|author/.test(source)) {
+    return 'books';
+  }
+  if (/game|unity|gaming|interactive/.test(source)) return 'games';
+  if (/system|product|suite|platform|coach|workflow/.test(source)) return 'systems';
+  if (/utility|tool|extension|launcher|tweak/.test(source)) return 'tools';
+  return 'software';
+}
+
+function extractYouTubeId(url = '') {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes('youtu.be')) return parsed.pathname.slice(1);
+    if (parsed.searchParams.get('v')) return parsed.searchParams.get('v');
+    const shortsMatch = parsed.pathname.match(/\/(?:shorts|embed)\/([^/?]+)/);
+    return shortsMatch?.[1] || '';
+  } catch {
+    const match = url.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([^?&/]+)/);
+    return match?.[1] || '';
+  }
+}
 
 function App() {
   const API_URL = import.meta.env.VITE_API_URL || '';
-
   const [projects, setProjects] = useState([]);
   const [youtubeVideos, setYoutubeVideos] = useState([]);
-  const [selectedVideo, setSelectedVideo] = useState(null);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [videosLoading, setVideosLoading] = useState(true);
+  const [projectError, setProjectError] = useState('');
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [query, setQuery] = useState('');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    const loadProjects = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/projects`);
-        const json = await res.json();
+    const controller = new AbortController();
 
+    async function loadProjects() {
+      try {
+        const response = await fetch(`${API_URL}/api/projects`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Projects request failed (${response.status})`);
+        const json = await response.json();
         const list = Array.isArray(json)
           ? json
-          : Array.isArray(json.data)
+          : Array.isArray(json?.data)
             ? json.data
             : [];
-
         setProjects(list);
-      } catch (err) {
-        console.error('Error fetching projects:', err);
-        setProjects([]);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching projects:', error);
+          setProjectError('The project library is temporarily unavailable.');
+        }
       } finally {
         setProjectsLoading(false);
       }
-    };
+    }
 
-    loadProjects();
-  }, [API_URL]);
-
-  useEffect(() => {
-    const loadVideos = async () => {
+    async function loadVideos() {
       try {
-        const res = await fetch(`${API_URL}/api/youtube`);
-        const data = await res.json();
-        setYoutubeVideos(Array.isArray(data) ? data : []);
-
-        if (data && data.length > 0) {
-          setSelectedVideo(data[0]);
+        const response = await fetch(`${API_URL}/api/youtube`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`YouTube request failed (${response.status})`);
+        const json = await response.json();
+        setYoutubeVideos(Array.isArray(json) ? json : []);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error fetching YouTube videos:', error);
         }
-      } catch (err) {
-        console.error('Error fetching YouTube videos:', err);
       } finally {
         setVideosLoading(false);
       }
-    };
+    }
+
+    loadProjects();
     loadVideos();
+    return () => controller.abort();
   }, [API_URL]);
 
-  const getThumbnail = (video) =>
-    video.youtube_url
-      ? `https://img.youtube.com/vi/${extractId(
-          video.youtube_url,
-        )}/hqdefault.jpg`
-      : '';
+  const projectsWithCategory = useMemo(
+    () => projects.map((project) => ({ ...project, _category: getProjectCategory(project) })),
+    [projects],
+  );
 
-  const extractId = (url) => {
-    if (!url) return '';
-    const match = url.match(/v=([^&]+)/);
-    return match?.[1] || '';
+  const categoryCounts = useMemo(() => {
+    return projectsWithCategory.reduce((counts, project) => {
+      counts[project._category] = (counts[project._category] || 0) + 1;
+      return counts;
+    }, {});
+  }, [projectsWithCategory]);
+
+  const filteredProjects = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return projectsWithCategory.filter((project) => {
+      const matchesCategory = activeCategory === 'all' || project._category === activeCategory;
+      if (!matchesCategory) return false;
+      if (!normalizedQuery) return true;
+
+      const haystack = [
+        project.title,
+        project.description,
+        project.project_type,
+        ...normalizeList(project.tech_stack),
+        ...normalizeList(project.architecture_tags),
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [projectsWithCategory, activeCategory, query]);
+
+  const sortedVideos = useMemo(
+    () =>
+      [...youtubeVideos].sort(
+        (a, b) => new Date(b.video_date || 0) - new Date(a.video_date || 0),
+      ),
+    [youtubeVideos],
+  );
+
+  const featuredVideos = sortedVideos.slice(0, 3);
+
+  const scrollToProjects = () => {
+    document.getElementById('work')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const activeVideo = selectedVideo || youtubeVideos[0];
-
-  const sortedVideos = [...youtubeVideos].sort((a, b) => {
-    return new Date(b.video_date) - new Date(a.video_date);
-  });
-
   return (
-    <Routes>
-      <Route path='/admin' element={<AdminDashboard />} />
-      <Route
-        path='/'
-        element={
-          <div className='min-h-screen bg-gray-900 text-gray-100 font-sans'>
-            <header className='relative overflow-hidden border-b border-gray-800/80 bg-gradient-to-b from-slate-950 via-gray-900 to-gray-900 py-20 px-4'>
-              <div className='absolute top-0 left-1/4 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none'></div>
-              <div className='absolute bottom-0 right-1/4 translate-y-1/2 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none'></div>
+    <div className='site-shell'>
+      <header className='site-header'>
+        <a className='brand-lockup' href='#top' aria-label='PGDevHouse home'>
+          <span className='brand-mark' aria-hidden='true'>PG</span>
+          <span className='brand-copy'>
+            <strong>PGDevHouse</strong>
+            <small>Build. Test. Refine.</small>
+          </span>
+        </a>
 
-              <div className='max-w-6xl mx-auto relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-8'>
-                <div className='max-w-2xl text-center md:text-left'>
-                  <div className='inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/5 border border-emerald-500/20 text-xs font-semibold text-emerald-400 mb-6 tracking-wide backdrop-blur-sm animate-pulse'>
-                    <span className='w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'></span>
-                    API ENGINE: OPERATIONAL
-                  </div>
+        <nav className={`primary-nav ${mobileNavOpen ? 'is-open' : ''}`} aria-label='Primary navigation'>
+          <a href='#work' onClick={() => setMobileNavOpen(false)}>Work</a>
+          <a href='#studio' onClick={() => setMobileNavOpen(false)}>Studio</a>
+          <a href='#after-hours' onClick={() => setMobileNavOpen(false)}>After Hours</a>
+          <a href='#about' onClick={() => setMobileNavOpen(false)}>About</a>
+        </nav>
 
-                  <h1 className='text-4xl md:text-6xl font-black text-white tracking-tight leading-none'>
-                    Patrick R.{' '}
-                    <span className='bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 via-teal-300 to-purple-400'>
-                      Grady
-                    </span>
-                  </h1>
+        <div className='header-actions'>
+          <a className='icon-link' href='https://github.com/patgrady64' target='_blank' rel='noreferrer' aria-label='GitHub'>
+            <Github size={19} />
+          </a>
+          <button
+            className='menu-button'
+            type='button'
+            aria-label='Toggle navigation'
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            {mobileNavOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        </div>
+      </header>
 
-                  <p className='text-xl md:text-2xl text-slate-300 mt-3 font-semibold tracking-wide'>
-                    Software Engineer{' '}
-                    <span className='text-emerald-500/40 font-light'>|</span> AI
-                    Integration Specialist
-                  </p>
+      <main id='top'>
+        <section className='hero-section'>
+          <div className='hero-glow hero-glow-one' />
+          <div className='hero-glow hero-glow-two' />
+          <div className='hero-grid' />
 
-                  <p className='text-gray-400 mt-6 leading-relaxed text-base md:text-lg max-w-xl'>
-                    Building dynamic full-stack infrastructure and highly
-                    optimized mobile applications. Focused on algorithmic
-                    structural execution and intelligent workflows.
-                  </p>
-
-                  <p className='text-gray-400 mt-3 leading-relaxed text-base md:text-lg max-w-xl'>
-                    When the compiler rests, I reverse-engineer retro game
-                    architecture—analyzing routing logic, seed pacing, and
-                    combat mechanics for{' '}
-                    <span className='text-amber-400 font-medium'>Zelda 1</span>{' '}
-                    and{' '}
-                    <span className='text-amber-400 font-medium'>
-                      Super Mario Bros. 3
-                    </span>{' '}
-                    Randomizers.
-                  </p>
-
-                  <div className='flex flex-wrap items-center justify-center md:justify-start gap-4 mt-8'>
-                    <a
-                      href='https://github.com/patgrady64'
-                      target='_blank'
-                      rel='noreferrer'
-                      className='flex items-center gap-2.5 bg-gray-800 hover:bg-gray-700 text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-700 hover:border-gray-600 shadow-md transition-all duration-200'>
-                      <FontAwesomeIcon icon={faGithub} className='text-lg' />{' '}
-                      GitHub Profile
-                    </a>
-                    <a
-                      href='https://www.linkedin.com/in/patgrady64/'
-                      target='_blank'
-                      rel='noreferrer'
-                      className='flex items-center gap-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-200 hover:text-white font-medium text-sm px-4 py-2.5 rounded-xl border border-gray-800 hover:border-gray-700 transition-all duration-200'>
-                      <FontAwesomeIcon
-                        icon={faLinkedin}
-                        className='text-lg text-blue-400'
-                      />{' '}
-                      LinkedIn Network
-                    </a>
-                    <a
-                      href='https://www.youtube.com/@iminvisibl2u'
-                      target='_blank'
-                      rel='noreferrer'
-                      className='flex items-center gap-2.5 bg-red-950/20 hover:bg-red-900/30 text-red-400 hover:text-red-300 font-medium text-sm px-4 py-2.5 rounded-xl border border-red-900/30 hover:border-red-700/50 transition-all duration-200'>
-                      <FontAwesomeIcon icon={faYoutube} className='text-lg' />{' '}
-                      YouTube Channel
-                    </a>
-                  </div>
-                </div>
-
-                <div className='w-full md:w-80 bg-gray-950/40 border border-gray-800 rounded-2xl p-6 backdrop-blur-md shadow-2xl self-start md:self-auto'>
-                  <h3 className='text-xs font-bold text-slate-500 uppercase tracking-widest border-b border-gray-800 pb-2 mb-4 flex items-center justify-between'>
-                    <span>Environment Profile</span>
-                    <span className='text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono'>
-                      v1.0.0
-                    </span>
-                  </h3>
-                  <ul className='space-y-3 font-mono text-xs'>
-                    <li className='flex justify-between'>
-                      <span className='text-gray-500'>Focus:</span>{' '}
-                      <span className='text-emerald-400'>
-                        AI & Software Eng.
-                      </span>
-                    </li>
-                    <li className='flex justify-between'>
-                      <span className='text-gray-500'>Frameworks:</span>{' '}
-                      <span className='text-slate-300'>
-                        React, Flask, Supabase
-                      </span>
-                    </li>
-                    <li className='flex justify-between'>
-                      <span className='text-gray-500'>Languages:</span>{' '}
-                      <span className='text-slate-300'>Python, Kotlin</span>
-                    </li>
-                    <li className='flex justify-between'>
-                      <span className='text-gray-500'>Routing Target:</span>{' '}
-                      <span className='text-amber-400'>Z1R / SMB3R</span>
-                    </li>
-                    <li className='flex justify-between pt-2 border-t border-gray-800/40'>
-                      <span className='text-gray-600'>Console Pipeline:</span>
-                      <Link
-                        to='/admin'
-                        className='text-gray-500 hover:text-emerald-400 transition-colors duration-150'>
-                        Open Admin →
-                      </Link>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </header>
-
-            <main className='max-w-6xl mx-auto px-6 py-16 space-y-20'>
-              <section>
-                <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-10 border-b border-gray-800 pb-4'>
-                  <h2 className='text-2xl font-bold text-white tracking-tight flex items-center gap-3'>
-                    <Code className='text-emerald-400 stroke-[2.5]' size={22} />{' '}
-                    Production Software Projects
-                  </h2>
-                </div>
-                {projectsLoading ? (
-                  <p>Loading...</p>
-                ) : (
-                  <ProjectGallery projects={projects} />
-                )}
-              </section>
-
-              <section>
-                <div className='mb-10 border-b border-gray-800 pb-4'>
-                  <h2 className='text-2xl font-bold text-white tracking-tight flex items-center gap-3'>
-                    <Tv className='text-purple-400 stroke-[2.5]' size={22} />{' '}
-                    Randomizer Run Archive{' '}
-                  </h2>
-                  <p className='text-sm text-gray-500 mt-1'>
-                    A curated archive of gameplay runs generated from randomized
-                    and seeded games.
-                  </p>
-                </div>
-
-                <div className='space-y-8'>
-                  {' '}
-                  {/* ROW 1 */}
-                  <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
-                    {/* Thumbnail */}
-                    <div
-                      className='aspect-video rounded-xl overflow-hidden bg-gray-950 border border-gray-900 shadow-inner relative cursor-pointer'
-                      onClick={() => setSelectedVideo(activeVideo)}>
-                      {' '}
-                      <img
-                        src={
-                          activeVideo?.youtube_url
-                            ? `https://img.youtube.com/vi/${extractId(
-                                activeVideo.youtube_url,
-                              )}/hqdefault.jpg`
-                            : null
-                        }
-                        className='w-full h-full object-cover'
-                        alt={activeVideo?.title}
-                      />
-                      <div className='absolute inset-0 flex items-center justify-center'>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(activeVideo?.youtube_url, '_blank');
-                          }}
-                          className='bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-full font-bold shadow-lg transition'>
-                          ▶ Play
-                        </button>
-                      </div>
-                    </div>
-                    {/* Description Panel */}{' '}
-                    <div className='bg-gray-900 border border-gray-800 rounded-xl p-4'>
-                      <h3 className='text-white font-bold text-lg mb-2'>
-                        {activeVideo?.title}
-                      </h3>
-
-                      <p className='text-xs text-gray-400 mb-3'>
-                        {activeVideo?.video_date}
-                      </p>
-
-                      <div className='text-sm text-gray-300 max-h-64 overflow-y-auto pr-2'>
-                        {activeVideo?.description}
-                      </div>
-                    </div>
-                  </div>
-                  {/* ROW 2 */}
-                  <div className='border border-gray-800 rounded-xl overflow-hidden'>
-                    <table className='w-full text-sm text-left'>
-                      <thead className='bg-gray-900 text-gray-400 text-xs uppercase'>
-                        <tr>
-                          <th className='px-3 py-2'>Title</th>
-                          <th className='px-3 py-2'>Game</th>
-                          <th className='px-3 py-2'>Date</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {sortedVideos.map((video) => (
-                          <tr
-                            key={video.id}
-                            onClick={() => setSelectedVideo(video)}
-                            className={`cursor-pointer hover:bg-gray-800 ${
-                              selectedVideo?.id === video.id
-                                ? 'bg-gray-800'
-                                : ''
-                            }`}>
-                            <td className='px-3 py-2 text-white font-medium'>
-                              <div className='flex items-center gap-2'>
-                                {video.title}
-
-                                {selectedVideo?.id === video.id && (
-                                  <span className='text-[10px] px-2 py-0.5 rounded-full bg-red-600 text-white font-bold tracking-wide animate-pulse'>
-                                    NOW PLAYING
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-
-                            <td className='px-3 py-2 text-white font-medium'>
-                              {video.game}
-                            </td>
-                            <td className='px-3 py-2 text-gray-400'>
-                              {video.video_date}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {/* ROW 3 */}
-                  <div className='bg-gradient-to-b from-gray-900 to-gray-950 border border-gray-800 rounded-2xl p-6 shadow-xl space-y-6'>
-                    <div>
-                      <h3 className='text-sm font-bold text-white tracking-wide flex items-center gap-2'>
-                        <Tv className='text-purple-400' size={16} /> BROADCAST
-                        SPECIFICATIONS
-                      </h3>
-
-                      <p className='text-xs text-gray-400 mt-3 leading-relaxed'>
-                        Gameplay capture sequences run on a localized, silent
-                        system environment...
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </main>
+          <div className='hero-content'>
+            <div className='eyebrow'>
+              <Sparkles size={15} />
+              Independent software studio + creative lab
+            </div>
+            <h1>
+              One home for <span>everything I build.</span>
+            </h1>
+            <p className='hero-lede'>
+              PGDevHouse is the working portfolio of Patrick R. Grady—software,
+              games, practical systems, books, experiments, and the tools that grow
+              out of solving real problems.
+            </p>
+            <div className='hero-actions'>
+              <button className='button button-primary' type='button' onClick={scrollToProjects}>
+                Explore the work <ArrowRight size={18} />
+              </button>
+              <a className='button button-secondary' href='https://github.com/patgrady64' target='_blank' rel='noreferrer'>
+                <Github size={18} /> GitHub
+              </a>
+            </div>
           </div>
-        }
-      />
-    </Routes>
+
+          <aside className='hero-panel' aria-label='PGDevHouse focus areas'>
+            <div className='hero-panel-label'>Inside PGDevHouse</div>
+            <div className='focus-stack'>
+              {CATEGORY_DEFINITIONS.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type='button'
+                  className='focus-row'
+                  onClick={() => {
+                    setActiveCategory(id);
+                    scrollToProjects();
+                  }}
+                >
+                  <span className='focus-icon'><Icon size={18} /></span>
+                  <span>{label}</span>
+                  <span className='focus-count'>{categoryCounts[id] || '—'}</span>
+                </button>
+              ))}
+            </div>
+          </aside>
+        </section>
+
+        <section className='studio-strip' id='studio'>
+          <div className='section-heading compact-heading'>
+            <div>
+              <span className='section-kicker'>Not just an app portfolio</span>
+              <h2>Built across different kinds of work.</h2>
+            </div>
+            <p>
+              PC Strong and DiamondFlow belong beside apps and games. Books belong here too.
+              The site is organized around what a project <em>is</em>, not what file type it happens to ship as.
+            </p>
+          </div>
+
+          <div className='discipline-grid'>
+            {CATEGORY_DEFINITIONS.map(({ id, label, description, icon: Icon }) => (
+              <button
+                key={id}
+                type='button'
+                className='discipline-card'
+                onClick={() => {
+                  setActiveCategory(id);
+                  scrollToProjects();
+                }}
+              >
+                <span className='discipline-icon'><Icon size={21} /></span>
+                <strong>{label}</strong>
+                <span>{description}</span>
+                <span className='discipline-link'>Browse {label.toLowerCase()} <ArrowRight size={15} /></span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className='work-section' id='work'>
+          <div className='section-heading'>
+            <div>
+              <span className='section-kicker'>Project library</span>
+              <h2>The work, all in one place.</h2>
+            </div>
+            <p>
+              Filter by discipline or search across titles, technologies, descriptions, and tags.
+            </p>
+          </div>
+
+          <div className='library-toolbar'>
+            <div className='category-filters' role='group' aria-label='Filter projects by category'>
+              <button
+                type='button'
+                className={activeCategory === 'all' ? 'filter-pill active' : 'filter-pill'}
+                onClick={() => setActiveCategory('all')}
+              >
+                All <span>{projects.length || '—'}</span>
+              </button>
+              {CATEGORY_DEFINITIONS.map(({ id, shortLabel }) => (
+                <button
+                  key={id}
+                  type='button'
+                  className={activeCategory === id ? 'filter-pill active' : 'filter-pill'}
+                  onClick={() => setActiveCategory(id)}
+                >
+                  {shortLabel} <span>{categoryCounts[id] || 0}</span>
+                </button>
+              ))}
+            </div>
+
+            <label className='project-search'>
+              <Search size={17} />
+              <input
+                type='search'
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder='Search projects...'
+                aria-label='Search projects'
+              />
+            </label>
+          </div>
+
+          {projectsLoading ? (
+            <div className='project-status-grid' aria-label='Loading projects'>
+              {[1, 2, 3].map((item) => <div className='project-skeleton' key={item} />)}
+            </div>
+          ) : projectError ? (
+            <div className='library-message error-message'>
+              <Layers3 size={22} />
+              <div><strong>Couldn’t load the project library.</strong><span>{projectError}</span></div>
+            </div>
+          ) : (
+            <ProjectGallery projects={filteredProjects} categoryDefinitions={CATEGORY_DEFINITIONS} />
+          )}
+        </section>
+
+        <section className='after-hours-section' id='after-hours'>
+          <div className='after-hours-copy'>
+            <span className='section-kicker'>After hours</span>
+            <h2>YouTube is still here—just not running the place.</h2>
+            <p>
+              Retro-game randomizers, routing experiments, and gameplay are a hobby archive,
+              separate from the main PGDevHouse project catalog.
+            </p>
+            <a className='text-link' href='https://www.youtube.com/@iminvisibl2u' target='_blank' rel='noreferrer'>
+              Visit the channel <ExternalLink size={15} />
+            </a>
+          </div>
+
+          <div className='video-grid'>
+            {videosLoading ? (
+              [1, 2, 3].map((item) => <div className='video-card video-skeleton' key={item} />)
+            ) : featuredVideos.length ? (
+              featuredVideos.map((video) => {
+                const videoId = extractYouTubeId(video.youtube_url);
+                return (
+                  <a className='video-card' href={video.youtube_url} target='_blank' rel='noreferrer' key={video.id || video.youtube_url}>
+                    <div className='video-thumb'>
+                      {videoId ? <img src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`} alt='' /> : <Youtube size={30} />}
+                      <span className='play-badge'>▶</span>
+                    </div>
+                    <div className='video-copy'>
+                      <span>{video.game || 'YouTube'}</span>
+                      <strong>{video.title}</strong>
+                    </div>
+                  </a>
+                );
+              })
+            ) : (
+              <div className='video-empty'>YouTube archive will appear here when videos are available.</div>
+            )}
+          </div>
+        </section>
+
+        <section className='about-section' id='about'>
+          <div className='about-monogram' aria-hidden='true'>PRG</div>
+          <div className='about-copy'>
+            <span className='section-kicker'>About the builder</span>
+            <h2>Patrick R. Grady</h2>
+            <p>
+              I build things because I like turning an idea, irritation, workflow, or story into
+              something concrete. PGDevHouse is where those projects live together instead of being
+              scattered across unrelated repos, downloads, documents, and experiments.
+            </p>
+            <div className='about-links'>
+              <a href='https://github.com/patgrady64' target='_blank' rel='noreferrer'><Github size={17} /> GitHub</a>
+              <a href='https://www.linkedin.com/in/patgrady64/' target='_blank' rel='noreferrer'><Linkedin size={17} /> LinkedIn</a>
+              <a href='https://www.youtube.com/@iminvisibl2u' target='_blank' rel='noreferrer'><Youtube size={17} /> YouTube</a>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className='site-footer'>
+        <div>
+          <strong>PGDevHouse</strong>
+          <span>Software, systems, games, books, and useful experiments.</span>
+        </div>
+        <div className='footer-meta'>
+          <span>Built by Patrick R. Grady</span>
+          <a href='/admin'>Admin</a>
+        </div>
+      </footer>
+    </div>
   );
 }
 
