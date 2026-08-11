@@ -6,64 +6,41 @@ import {
   Code2,
   ExternalLink,
   Gamepad2,
-  Github,
   Layers3,
-  Linkedin,
   Menu,
   Search,
-  Sparkles,
   Wrench,
   X,
-  Youtube,
 } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faGithub, faLinkedin, faYoutube } from '@fortawesome/free-brands-svg-icons';
 import ProjectGallery from './pages/ProjectGallery';
 import './App.css';
 
 const CATEGORY_DEFINITIONS = [
+  { id: 'software', label: 'Software', shortLabel: 'Software', icon: Code2 },
+  { id: 'systems', label: 'Systems & Products', shortLabel: 'Systems', icon: Boxes },
+  { id: 'games', label: 'Games', shortLabel: 'Games', icon: Gamepad2 },
+  { id: 'books', label: 'Books & Writing', shortLabel: 'Books', icon: BookOpen },
+  { id: 'tools', label: 'Tools & Utilities', shortLabel: 'Tools', icon: Wrench },
+];
+
+const UPCOMING_PROJECTS = [
   {
-    id: 'software',
-    label: 'Software',
-    shortLabel: 'Software',
-    icon: Code2,
-    description: 'Web, mobile, desktop, and full-stack applications.',
-  },
-  {
-    id: 'systems',
-    label: 'Systems & Products',
-    shortLabel: 'Systems',
-    icon: Boxes,
-    description: 'Larger product ecosystems, workflows, and packaged solutions.',
-  },
-  {
-    id: 'games',
-    label: 'Games',
-    shortLabel: 'Games',
-    icon: Gamepad2,
-    description: 'Original games, prototypes, and interactive experiments.',
-  },
-  {
-    id: 'books',
-    label: 'Books & Writing',
-    shortLabel: 'Books',
+    title: 'Method Over Magic',
+    type: 'Book & Workbook',
+    status: 'In Development',
+    description:
+      'A practical, secular recovery workbook that translates 12-step ideas into concrete reflection, behavior change, and repeatable methods—without requiring a belief in God.',
+    note: 'Planned for publication. Release details will be added when the book is ready.',
     icon: BookOpen,
-    description: 'Fiction, nonfiction, workbooks, and long-form creative projects.',
-  },
-  {
-    id: 'tools',
-    label: 'Tools & Utilities',
-    shortLabel: 'Tools',
-    icon: Wrench,
-    description: 'Focused utilities that solve one annoying problem well.',
   },
 ];
 
 function normalizeList(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (typeof value === 'string') {
-    return value
-      .split(/[;,]/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+    return value.split(/[;,]/).map((item) => item.trim()).filter(Boolean);
   }
   return [];
 }
@@ -73,13 +50,9 @@ function getProjectCategory(project) {
     project?.project_type,
     ...normalizeList(project?.architecture_tags),
     ...normalizeList(project?.tech_stack),
-  ]
-    .join(' ')
-    .toLowerCase();
+  ].join(' ').toLowerCase();
 
-  if (/book|novel|writing|workbook|memoir|fiction|nonfiction|author/.test(source)) {
-    return 'books';
-  }
+  if (/book|novel|writing|workbook|memoir|fiction|nonfiction|author/.test(source)) return 'books';
   if (/game|unity|gaming|interactive/.test(source)) return 'games';
   if (/system|product|suite|platform|coach|workflow/.test(source)) return 'systems';
   if (/utility|tool|extension|launcher|tweak/.test(source)) return 'tools';
@@ -115,21 +88,15 @@ function App() {
 
     async function loadProjects() {
       try {
-        const response = await fetch(`${API_URL}/api/projects`, {
-          signal: controller.signal,
-        });
+        const response = await fetch(`${API_URL}/api/projects`, { signal: controller.signal });
         if (!response.ok) throw new Error(`Projects request failed (${response.status})`);
         const json = await response.json();
-        const list = Array.isArray(json)
-          ? json
-          : Array.isArray(json?.data)
-            ? json.data
-            : [];
+        const list = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
         setProjects(list);
       } catch (error) {
         if (error.name !== 'AbortError') {
           console.error('Error fetching projects:', error);
-          setProjectError('The project library is temporarily unavailable.');
+          setProjectError('The project list is temporarily unavailable.');
         }
       } finally {
         setProjectsLoading(false);
@@ -138,16 +105,12 @@ function App() {
 
     async function loadVideos() {
       try {
-        const response = await fetch(`${API_URL}/api/youtube`, {
-          signal: controller.signal,
-        });
+        const response = await fetch(`${API_URL}/api/youtube`, { signal: controller.signal });
         if (!response.ok) throw new Error(`YouTube request failed (${response.status})`);
         const json = await response.json();
         setYoutubeVideos(Array.isArray(json) ? json : []);
       } catch (error) {
-        if (error.name !== 'AbortError') {
-          console.error('Error fetching YouTube videos:', error);
-        }
+        if (error.name !== 'AbortError') console.error('Error fetching YouTube videos:', error);
       } finally {
         setVideosLoading(false);
       }
@@ -163,18 +126,22 @@ function App() {
     [projects],
   );
 
-  const categoryCounts = useMemo(() => {
-    return projectsWithCategory.reduce((counts, project) => {
+  const categoryCounts = useMemo(() => (
+    projectsWithCategory.reduce((counts, project) => {
       counts[project._category] = (counts[project._category] || 0) + 1;
       return counts;
-    }, {});
-  }, [projectsWithCategory]);
+    }, {})
+  ), [projectsWithCategory]);
+
+  const populatedCategories = useMemo(
+    () => CATEGORY_DEFINITIONS.filter(({ id }) => categoryCounts[id] > 0),
+    [categoryCounts],
+  );
 
   const filteredProjects = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return projectsWithCategory.filter((project) => {
-      const matchesCategory = activeCategory === 'all' || project._category === activeCategory;
-      if (!matchesCategory) return false;
+      if (activeCategory !== 'all' && project._category !== activeCategory) return false;
       if (!normalizedQuery) return true;
 
       const haystack = [
@@ -183,22 +150,20 @@ function App() {
         project.project_type,
         ...normalizeList(project.tech_stack),
         ...normalizeList(project.architecture_tags),
-      ]
-        .join(' ')
-        .toLowerCase();
+      ].join(' ').toLowerCase();
+
       return haystack.includes(normalizedQuery);
     });
   }, [projectsWithCategory, activeCategory, query]);
 
   const sortedVideos = useMemo(
-    () =>
-      [...youtubeVideos].sort(
-        (a, b) => new Date(b.video_date || 0) - new Date(a.video_date || 0),
-      ),
+    () => [...youtubeVideos].sort((a, b) => new Date(b.video_date || 0) - new Date(a.video_date || 0)),
     [youtubeVideos],
   );
 
-  const featuredVideos = sortedVideos.slice(0, 3);
+  const featuredVideos = sortedVideos.slice(0, 2);
+  const showFilters = projects.length >= 5 && populatedCategories.length > 1;
+  const showSearch = projects.length >= 8;
 
   const scrollToProjects = () => {
     document.getElementById('work')?.scrollIntoView({ behavior: 'smooth' });
@@ -211,20 +176,20 @@ function App() {
           <span className='brand-mark' aria-hidden='true'>PG</span>
           <span className='brand-copy'>
             <strong>PGDevHouse</strong>
-            <small>Build. Test. Refine.</small>
+            <small>Patrick R. Grady</small>
           </span>
         </a>
 
         <nav className={`primary-nav ${mobileNavOpen ? 'is-open' : ''}`} aria-label='Primary navigation'>
           <a href='#work' onClick={() => setMobileNavOpen(false)}>Work</a>
-          <a href='#studio' onClick={() => setMobileNavOpen(false)}>Studio</a>
-          <a href='#after-hours' onClick={() => setMobileNavOpen(false)}>After Hours</a>
+          <a href='#development' onClick={() => setMobileNavOpen(false)}>In Development</a>
           <a href='#about' onClick={() => setMobileNavOpen(false)}>About</a>
+          <a href='#youtube' onClick={() => setMobileNavOpen(false)}>YouTube</a>
         </nav>
 
         <div className='header-actions'>
           <a className='icon-link' href='https://github.com/patgrady64' target='_blank' rel='noreferrer' aria-label='GitHub'>
-            <Github size={19} />
+            <FontAwesomeIcon icon={faGithub} />
           </a>
           <button
             className='menu-button'
@@ -233,175 +198,184 @@ function App() {
             aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen((open) => !open)}
           >
-            {mobileNavOpen ? <X size={22} /> : <Menu size={22} />}
+            {mobileNavOpen ? <X size={21} /> : <Menu size={21} />}
           </button>
         </div>
       </header>
 
       <main id='top'>
         <section className='hero-section'>
-          <div className='hero-glow hero-glow-one' />
-          <div className='hero-glow hero-glow-two' />
-          <div className='hero-grid' />
-
           <div className='hero-content'>
-            <div className='eyebrow'>
-              <Sparkles size={15} />
-              Independent software studio + creative lab
-            </div>
-            <h1>
-              One home for <span>everything I build.</span>
-            </h1>
+            <span className='eyebrow'>Independent developer & creator</span>
+            <h1>Useful things.<br /><span>Interesting ideas.</span></h1>
             <p className='hero-lede'>
-              PGDevHouse is the working portfolio of Patrick R. Grady—software,
-              games, practical systems, books, experiments, and the tools that grow
-              out of solving real problems.
+              PGDevHouse is where I keep the software, systems, games, tools, and writing I’m building—
+              all under one roof, without pretending they’re all the same kind of project.
             </p>
             <div className='hero-actions'>
               <button className='button button-primary' type='button' onClick={scrollToProjects}>
-                Explore the work <ArrowRight size={18} />
+                See what I’m building <ArrowRight size={17} />
               </button>
               <a className='button button-secondary' href='https://github.com/patgrady64' target='_blank' rel='noreferrer'>
-                <Github size={18} /> GitHub
+                <FontAwesomeIcon icon={faGithub} /> GitHub
               </a>
             </div>
           </div>
 
-          <aside className='hero-panel' aria-label='PGDevHouse focus areas'>
-            <div className='hero-panel-label'>Inside PGDevHouse</div>
-            <div className='focus-stack'>
-              {CATEGORY_DEFINITIONS.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  type='button'
-                  className='focus-row'
-                  onClick={() => {
-                    setActiveCategory(id);
-                    scrollToProjects();
-                  }}
-                >
-                  <span className='focus-icon'><Icon size={18} /></span>
-                  <span>{label}</span>
-                  <span className='focus-count'>{categoryCounts[id] || '—'}</span>
-                </button>
-              ))}
-            </div>
-          </aside>
-        </section>
-
-        <section className='studio-strip' id='studio'>
-          <div className='section-heading compact-heading'>
-            <div>
-              <span className='section-kicker'>Not just an app portfolio</span>
-              <h2>Built across different kinds of work.</h2>
-            </div>
+          <aside className='hero-note'>
+            <span>PGDevHouse</span>
             <p>
-              PC Strong and DiamondFlow belong beside apps and games. Books belong here too.
-              The site is organized around what a project <em>is</em>, not what file type it happens to ship as.
+              A growing body of work. Right now the focus is on building well and documenting the projects that are ready to show.
             </p>
-          </div>
-
-          <div className='discipline-grid'>
-            {CATEGORY_DEFINITIONS.map(({ id, label, description, icon: Icon }) => (
-              <button
-                key={id}
-                type='button'
-                className='discipline-card'
-                onClick={() => {
-                  setActiveCategory(id);
-                  scrollToProjects();
-                }}
-              >
-                <span className='discipline-icon'><Icon size={21} /></span>
-                <strong>{label}</strong>
-                <span>{description}</span>
-                <span className='discipline-link'>Browse {label.toLowerCase()} <ArrowRight size={15} /></span>
-              </button>
-            ))}
-          </div>
+            {!projectsLoading && projects.length > 0 && (
+              <div className='hero-note-meta'>
+                <strong>{projects.length}</strong>
+                <span>{projects.length === 1 ? 'project currently featured' : 'projects currently featured'}</span>
+              </div>
+            )}
+          </aside>
         </section>
 
         <section className='work-section' id='work'>
           <div className='section-heading'>
             <div>
-              <span className='section-kicker'>Project library</span>
-              <h2>The work, all in one place.</h2>
+              <span className='section-kicker'>Selected work</span>
+              <h2>What’s here now.</h2>
             </div>
             <p>
-              Filter by discipline or search across titles, technologies, descriptions, and tags.
+              This collection will grow over time. For now, these are the projects ready to have a home here.
             </p>
           </div>
 
-          <div className='library-toolbar'>
-            <div className='category-filters' role='group' aria-label='Filter projects by category'>
-              <button
-                type='button'
-                className={activeCategory === 'all' ? 'filter-pill active' : 'filter-pill'}
-                onClick={() => setActiveCategory('all')}
-              >
-                All <span>{projects.length || '—'}</span>
-              </button>
-              {CATEGORY_DEFINITIONS.map(({ id, shortLabel }) => (
-                <button
-                  key={id}
-                  type='button'
-                  className={activeCategory === id ? 'filter-pill active' : 'filter-pill'}
-                  onClick={() => setActiveCategory(id)}
-                >
-                  {shortLabel} <span>{categoryCounts[id] || 0}</span>
-                </button>
-              ))}
-            </div>
+          {(showFilters || showSearch) && (
+            <div className='library-toolbar'>
+              {showFilters && (
+                <div className='category-filters' role='group' aria-label='Filter projects by category'>
+                  <button
+                    type='button'
+                    className={activeCategory === 'all' ? 'filter-pill active' : 'filter-pill'}
+                    onClick={() => setActiveCategory('all')}
+                  >
+                    All <span>{projects.length}</span>
+                  </button>
+                  {populatedCategories.map(({ id, shortLabel }) => (
+                    <button
+                      key={id}
+                      type='button'
+                      className={activeCategory === id ? 'filter-pill active' : 'filter-pill'}
+                      onClick={() => setActiveCategory(id)}
+                    >
+                      {shortLabel} <span>{categoryCounts[id]}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
-            <label className='project-search'>
-              <Search size={17} />
-              <input
-                type='search'
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder='Search projects...'
-                aria-label='Search projects'
-              />
-            </label>
-          </div>
+              {showSearch && (
+                <label className='project-search'>
+                  <Search size={16} />
+                  <input
+                    type='search'
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder='Search projects...'
+                    aria-label='Search projects'
+                  />
+                </label>
+              )}
+            </div>
+          )}
 
           {projectsLoading ? (
             <div className='project-status-grid' aria-label='Loading projects'>
-              {[1, 2, 3].map((item) => <div className='project-skeleton' key={item} />)}
+              {[1, 2].map((item) => <div className='project-skeleton' key={item} />)}
             </div>
           ) : projectError ? (
             <div className='library-message error-message'>
-              <Layers3 size={22} />
-              <div><strong>Couldn’t load the project library.</strong><span>{projectError}</span></div>
+              <Layers3 size={21} />
+              <div><strong>Couldn’t load the projects.</strong><span>{projectError}</span></div>
             </div>
           ) : (
             <ProjectGallery projects={filteredProjects} categoryDefinitions={CATEGORY_DEFINITIONS} />
           )}
         </section>
 
-        <section className='after-hours-section' id='after-hours'>
-          <div className='after-hours-copy'>
-            <span className='section-kicker'>After hours</span>
-            <h2>YouTube is still here—just not running the place.</h2>
+        <section className='development-section' id='development'>
+          <div className='section-heading development-heading'>
+            <div>
+              <span className='section-kicker'>In development</span>
+              <h2>What’s coming next.</h2>
+            </div>
             <p>
-              Retro-game randomizers, routing experiments, and gameplay are a hobby archive,
-              separate from the main PGDevHouse project catalog.
+              A small look at active work that isn’t released yet. These are real projects in progress, not a list of every idea on the shelf.
             </p>
+          </div>
+
+          <div className='development-grid'>
+            {UPCOMING_PROJECTS.map((project) => {
+              const ProjectIcon = project.icon;
+              return (
+                <article className='development-card' key={project.title}>
+                  <div className='development-card-icon' aria-hidden='true'>
+                    <ProjectIcon size={24} strokeWidth={1.7} />
+                  </div>
+                  <div className='development-card-content'>
+                    <div className='development-card-meta'>
+                      <span>{project.type}</span>
+                      <span className='development-status'><span className='status-dot' aria-hidden='true' /> {project.status}</span>
+                    </div>
+                    <h3>{project.title}</h3>
+                    <p>{project.description}</p>
+                    <div className='development-note'>{project.note}</div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className='about-section' id='about'>
+          <div className='about-intro'>
+            <span className='section-kicker'>About</span>
+            <h2>Patrick R. Grady</h2>
+          </div>
+          <div className='about-copy'>
+            <p>
+              I like taking an idea, annoyance, workflow, or story and turning it into something concrete.
+              PGDevHouse gives those projects one place to live while they grow from experiments into finished work.
+            </p>
+            <p className='future-note'>
+              Over time this will include larger systems such as PC Strong and DiamondFlow, along with more software,
+              games, utilities, and published writing as each project becomes ready to show.
+            </p>
+            <div className='about-links'>
+              <a href='https://github.com/patgrady64' target='_blank' rel='noreferrer'><FontAwesomeIcon icon={faGithub} /> GitHub</a>
+              <a href='https://www.linkedin.com/in/patgrady64/' target='_blank' rel='noreferrer'><FontAwesomeIcon icon={faLinkedin} /> LinkedIn</a>
+            </div>
+          </div>
+        </section>
+
+        <section className='youtube-section' id='youtube'>
+          <div className='youtube-heading'>
+            <div>
+              <span className='section-kicker'>Side hobby</span>
+              <h2>YouTube</h2>
+            </div>
             <a className='text-link' href='https://www.youtube.com/@iminvisibl2u' target='_blank' rel='noreferrer'>
-              Visit the channel <ExternalLink size={15} />
+              Visit channel <ExternalLink size={14} />
             </a>
           </div>
 
           <div className='video-grid'>
             {videosLoading ? (
-              [1, 2, 3].map((item) => <div className='video-card video-skeleton' key={item} />)
+              [1, 2].map((item) => <div className='video-card video-skeleton' key={item} />)
             ) : featuredVideos.length ? (
               featuredVideos.map((video) => {
                 const videoId = extractYouTubeId(video.youtube_url);
                 return (
                   <a className='video-card' href={video.youtube_url} target='_blank' rel='noreferrer' key={video.id || video.youtube_url}>
                     <div className='video-thumb'>
-                      {videoId ? <img src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`} alt='' /> : <Youtube size={30} />}
+                      {videoId ? <img src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`} alt='' /> : <FontAwesomeIcon icon={faYoutube} />}
                       <span className='play-badge'>▶</span>
                     </div>
                     <div className='video-copy'>
@@ -412,37 +386,17 @@ function App() {
                 );
               })
             ) : (
-              <div className='video-empty'>YouTube archive will appear here when videos are available.</div>
+              <div className='video-empty'>The channel is linked above; recent videos will appear here when available.</div>
             )}
-          </div>
-        </section>
-
-        <section className='about-section' id='about'>
-          <div className='about-monogram' aria-hidden='true'>PRG</div>
-          <div className='about-copy'>
-            <span className='section-kicker'>About the builder</span>
-            <h2>Patrick R. Grady</h2>
-            <p>
-              I build things because I like turning an idea, irritation, workflow, or story into
-              something concrete. PGDevHouse is where those projects live together instead of being
-              scattered across unrelated repos, downloads, documents, and experiments.
-            </p>
-            <div className='about-links'>
-              <a href='https://github.com/patgrady64' target='_blank' rel='noreferrer'><Github size={17} /> GitHub</a>
-              <a href='https://www.linkedin.com/in/patgrady64/' target='_blank' rel='noreferrer'><Linkedin size={17} /> LinkedIn</a>
-              <a href='https://www.youtube.com/@iminvisibl2u' target='_blank' rel='noreferrer'><Youtube size={17} /> YouTube</a>
-            </div>
           </div>
         </section>
       </main>
 
       <footer className='site-footer'>
-        <div>
-          <strong>PGDevHouse</strong>
-          <span>Software, systems, games, books, and useful experiments.</span>
-        </div>
+        <div><strong>PGDevHouse</strong><span>Built by Patrick R. Grady</span></div>
         <div className='footer-meta'>
-          <span>Built by Patrick R. Grady</span>
+          <a href='https://github.com/patgrady64' target='_blank' rel='noreferrer'>GitHub</a>
+          <a href='https://www.linkedin.com/in/patgrady64/' target='_blank' rel='noreferrer'>LinkedIn</a>
           <a href='/admin'>Admin</a>
         </div>
       </footer>

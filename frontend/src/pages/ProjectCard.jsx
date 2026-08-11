@@ -7,11 +7,12 @@ import {
   Download,
   ExternalLink,
   Gamepad2,
-  Github,
   Image as ImageIcon,
   Wrench,
   X,
 } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faGithub } from '@fortawesome/free-brands-svg-icons';
 
 const CATEGORY_ICONS = {
   software: Code2,
@@ -92,7 +93,7 @@ export default function ProjectCard({ project, categoryDefinitions = [] }) {
             )}
             {project.github_url && (
               <a className='project-action secondary' href={project.github_url} target='_blank' rel='noreferrer'>
-                <Github size={15} /> Code
+                <FontAwesomeIcon icon={faGithub} /> Code
               </a>
             )}
             <button className='project-action ghost' type='button' onClick={() => setDetailsOpen(true)}>Details</button>
@@ -135,7 +136,7 @@ export default function ProjectCard({ project, categoryDefinitions = [] }) {
             <div className='modal-actions'>
               {project.live_url && <a className='button button-primary' href={project.live_url} target='_blank' rel='noreferrer'>Open project <ExternalLink size={17} /></a>}
               {!project.live_url && project.download_url && <a className='button button-primary' href={project.download_url}>Download <Download size={17} /></a>}
-              {project.github_url && <a className='button button-secondary' href={project.github_url} target='_blank' rel='noreferrer'><Github size={17} /> View code</a>}
+              {project.github_url && <a className='button button-secondary' href={project.github_url} target='_blank' rel='noreferrer'><FontAwesomeIcon icon={faGithub} /> View code</a>}
             </div>
           </div>
         </div>

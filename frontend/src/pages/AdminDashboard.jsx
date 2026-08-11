@@ -5,6 +5,12 @@ import { UploadCloud, LogOut, Terminal, ArrowLeft } from 'lucide-react'
 
 export default function AdminDashboard () {
   const API_URL = import.meta.env.VITE_API_URL || ''
+  const [activeTask, setActiveTask] = useState({
+    type: null,
+    progress: 0,
+    message: ''
+  })
+
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       activeTask.type === 'upload' &&
@@ -18,11 +24,6 @@ export default function AdminDashboard () {
   const [error, setError] = useState(null)
 
   const [fetchingProjects, setFetchingProjects] = useState(false)
-  const [activeTask, setActiveTask] = useState({
-    type: null,
-    progress: 0,
-    message: ''
-  })
 
   const fileInputRef = React.useRef(null)
 
@@ -65,7 +66,7 @@ export default function AdminDashboard () {
 
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/admin/delete/${id}`,
+        `${API_URL}/api/admin/delete/${id}`,
         {
           method: 'DELETE'
         }
@@ -208,7 +209,7 @@ export default function AdminDashboard () {
     // 5. Send to backend
     console.log('🔥 ABOUT TO UPLOAD TO BACKEND')
     console.log('STEP 2 ABOUT TO FETCH')
-    await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin/sync`, {
+    await fetch(`${API_URL}/api/admin/sync`, {
       method: 'POST',
       body: formData
     })
@@ -264,7 +265,7 @@ export default function AdminDashboard () {
       interval = setInterval(async () => {
         try {
           const res = await fetch(
-            `${import.meta.env.VITE_API_URL}/api/admin/sync-status`
+            `${API_URL}/api/admin/sync-status`
           )
           const data = await res.json()
           setActiveTask(prev => ({
@@ -290,9 +291,7 @@ export default function AdminDashboard () {
   const streamPayloadToPipeline = formData => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
-      const targetUrl = `${
-        import.meta.env.VITE_API_URL || 'http://localhost:5000'
-      }/api/admin/sync`
+      const targetUrl = `${API_URL}/api/admin/sync`
 
       xhr.open('POST', targetUrl, true)
 
